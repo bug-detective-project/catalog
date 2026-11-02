@@ -1,10 +1,11 @@
-/** Runs external commands (git, npm) with argument arrays, never through a shell. */
+/** Runs external commands (git, npm) with argument arrays; only npm.cmd on Windows goes through a shell. */
 import { spawn } from 'node:child_process';
 export function run(command, args, options = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(command, args, {
             cwd: options.cwd,
             env: options.env ?? process.env,
+            shell: options.shell ?? false,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
         const stdout = [];

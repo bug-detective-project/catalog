@@ -47,6 +47,11 @@ export function gatesOf(result: QaResult): Gates {
   return ['pass', result.status === 'passed' ? 'pass' : result.status === 'timeout' ? 'timeout' : 'fail'];
 }
 
+/** How to start npm: on Windows it is npm.cmd, a batch file that needs a shell. */
+export function npmInvocation(platform: NodeJS.Platform): { command: string; shell: boolean } {
+  return platform === 'win32' ? { command: 'npm.cmd', shell: true } : { command: 'npm', shell: false };
+}
+
 /** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
 export const npmQa: RunQa = async ({ qaDir, id, position, workspace }) => {
   const out = join(await mkdtemp(join(tmpdir(), 'bd-qa-')), 'result.json');
@@ -65,7 +70,12 @@ export const npmQa: RunQa = async ({ qaDir, id, position, workspace }) => {
       '--json',
       out,
     ];
-    const result = await run('npm', args, { cwd: qaDir });
+    const npm = npmInvocation(process.platform);
+    // Through cmd.exe, each argument is quoted so paths with spaces survive.
+    const result = await run(npm.command, npm.shell ? args.map((arg) => `"${arg}"`) : args, {
+      cwd: qaDir,
+      shell: npm.shell,
+    });
     const json = await readFile(out, 'utf8').catch(() => {
       throw new Error(`${id}: the QA tool wrote no result (exit ${result.code}):\n${result.stdout}${result.stderr}`);
     });

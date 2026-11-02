@@ -15,6 +15,8 @@ export interface ValidateRemoteOptions {
     fetchZip?: FetchZip;
     lsRemoteTags?: LsRemoteTags;
 }
+/** Downloads a zip, giving up after timeoutMs (a stalled download must not hang the daily check). */
+export declare function fetchZipWithTimeout(timeoutMs: number): FetchZip;
 export declare const fetchZipFromGitHub: FetchZip;
 /** The tags of a public repository and the commit each one points to (annotated tags peeled). */
 export declare const lsRemoteTagsFromGitHub: LsRemoteTags;

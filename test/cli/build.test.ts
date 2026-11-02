@@ -58,4 +58,26 @@ describe('bd build', () => {
     expect(repo.git(repo.qaDir, 'worktree', 'list').split('\n')).toHaveLength(2);
     expect(repo.git(repo.qaDir, 'branch', '--list', 'build-*')).toBe('');
   });
+
+  it('names the ticket whose reference.patch changes an existing test instead of adding one', async () => {
+    await writeFile(
+      join(repo.qaDir, 'tickets', 'back-1', 'reference.patch'),
+      'diff --git a/app.test.txt b/app.test.txt\n--- a/app.test.txt\n+++ b/app.test.txt\n@@ -1 +1 @@\n-main test\n+changed\n',
+    );
+    await expect(buildTickets({ qaDir: repo.qaDir, log: () => {} })).rejects.toThrow(
+      /back-1: reference\.patch must add its regression test as a new/,
+    );
+  });
+
+  it('recovers from an interrupted build that left a build-<id> branch and a worktree behind', async () => {
+    const stale = join(dir, 'stale-worktree');
+    repo.git(repo.qaDir, 'worktree', 'add', '-q', '-b', 'build-front-1', stale, 'main');
+    await rm(stale, { recursive: true, force: true });
+
+    await buildTickets({ qaDir: repo.qaDir, log: () => {} });
+
+    expect(repo.git(repo.qaDir, 'branch', '--list', 'build-*')).toBe('');
+    expect(repo.git(repo.qaDir, 'worktree', 'list').split('\n')).toHaveLength(2);
+    expect(repo.git(repo.qaDir, 'show', 'front-1:app.txt')).toBe('bug front-1');
+  });
 });

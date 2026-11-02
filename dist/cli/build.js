@@ -12,7 +12,7 @@
  */
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { readProject } from './manifest.js';
 import { gitIn } from './git.js';
 import { runChecked } from './process.js';
@@ -20,11 +20,15 @@ import { ticketIdsOf } from './tickets.js';
 const MAIN_TEST = /(\.test\.|\.spec\.)|(^|\/)test\//;
 const TEST_NAME = /\.(test|spec)\./;
 /** Writes the new test files of a reference.patch (its regression test) under a folder. */
-async function writeRegressionTests(patch, into) {
+async function writeRegressionTests(id, patch, into) {
     const scratch = await mkdtemp(join(tmpdir(), 'bd-regression-'));
     try {
         // Outside any repository, git apply works on plain files: only the new test files are written.
-        await runChecked('git', ['apply', '--include=*.test.*', '--include=*.spec.*', patch], { cwd: scratch });
+        await runChecked('git', ['apply', '--include=*.test.*', '--include=*.spec.*', patch], { cwd: scratch }).catch((error) => {
+            throw new Error(`${id}: reference.patch must add its regression test as a new *.test.* / *.spec.* file\n${error.message}`, {
+                cause: error,
+            });
+        });
         await cp(scratch, into, { recursive: true });
     }
     finally {
@@ -45,7 +49,7 @@ async function writeGate1(qaDir, base, id, ids) {
         await writeFile(join(gate1, file), stdout);
     }
     for (const other of ids.filter((item) => item !== id)) {
-        await writeRegressionTests(join(qaDir, 'tickets', other, 'reference.patch'), gate1);
+        await writeRegressionTests(other, join(qaDir, 'tickets', other, 'reference.patch'), gate1);
     }
 }
 /** Every test file of the worktree by name (*.test.* / *.spec.*), outside .git. */
@@ -54,7 +58,7 @@ async function testFilesOf(dir) {
     return entries
         .filter((entry) => entry.isFile() && TEST_NAME.test(entry.name))
         .map((entry) => join(entry.parentPath, entry.name))
-        .filter((path) => !path.slice(dir.length).split('/').includes('.git'));
+        .filter((path) => !path.slice(dir.length).split(sep).includes('.git'));
 }
 async function buildBranch(qaDir, base, id, project) {
     const git = gitIn(qaDir);
@@ -90,7 +94,15 @@ async function buildBranch(qaDir, base, id, project) {
     }
 }
 export async function buildTickets({ qaDir, base = 'main', log }) {
-    const ids = await ticketIdsOf(gitIn(qaDir));
+    const git = gitIn(qaDir);
+    // Leftovers of an interrupted build: its worktree registrations and build-<id> branches.
+    await git.text('worktree', 'prune');
+    for (const leftover of (await git.text('branch', '--list', '--format=%(refname:short)', 'build-*'))
+        .split('\n')
+        .filter(Boolean)) {
+        await git.text('branch', '--quiet', '-D', leftover);
+    }
+    const ids = await ticketIdsOf(git);
     const { name } = await readProject(qaDir);
     for (const id of ids) {
         await writeGate1(qaDir, base, id, ids);

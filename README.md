@@ -48,7 +48,7 @@ package and its code against the manifest.
 Depend on a tagged version, never on `main`:
 
 ```json
-"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.0.0"
+"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.0.1"
 ```
 
 `dist/` is committed, because Node does not run TypeScript from `node_modules` and pnpm does not
@@ -81,7 +81,10 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
 5. Merge. The merge reaches players the next time they take a ticket, and the project's workflow
    tags it as `qa-v2.5.0`.
 
-The `qa` branch is protected: it changes only through a pull request with green checks.
+The `qa` branch is protected: it changes only through a pull request with green checks, and the
+protection must enable "Require branches to be up to date before merging". The version check runs
+against `qa` when the checks run, so without it a second pull request with the same version could
+keep a stale green check after the first one is merged.
 
 ## Project workflow
 
@@ -99,7 +102,7 @@ on:
 
 jobs:
   project:
-    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.0.0
+    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.0.1
     permissions:
       contents: write
 ```

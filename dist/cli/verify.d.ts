@@ -29,6 +29,11 @@ export interface VerifyOptions {
 }
 /** The outcome of each gate: the result names the gate that failed or timed out (2 when passed). */
 export declare function gatesOf(result: QaResult): Gates;
+/** How to start npm: on Windows it is npm.cmd, a batch file that needs a shell. */
+export declare function npmInvocation(platform: NodeJS.Platform): {
+    command: string;
+    shell: boolean;
+};
 /** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
 export declare const npmQa: RunQa;
 export declare function verifyTickets({ qaDir, ids, runQa, }: VerifyOptions): Promise<{

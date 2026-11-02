@@ -3,7 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { HttpError, validateRemote } from '../../src/cli/remote.ts';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { HttpError, fetchZipWithTimeout, validateRemote } from '../../src/cli/remote.ts';
 import { publishLocally } from '../helpers/publication.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
 import type { ProjectRepo } from '../helpers/project-repo.ts';
@@ -84,5 +86,19 @@ describe('bd validate --remote', () => {
     await expect(
       validateRemote({ repository: 'bug-detective-project/demo', project: 'other', fetchZip, lsRemoteTags }),
     ).rejects.toThrow(/another project/);
+  });
+});
+
+describe('fetchZipWithTimeout', () => {
+  it('gives up on a server that never answers', async () => {
+    const server = createServer(() => {});
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      await expect(fetchZipWithTimeout(100)(`http://127.0.0.1:${port}/a.zip`)).rejects.toThrow(/did not answer within/);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
   });
 });

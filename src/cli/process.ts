@@ -1,4 +1,4 @@
-/** Runs external commands (git, npm) with argument arrays, never through a shell. */
+/** Runs external commands (git, npm) with argument arrays; only npm.cmd on Windows goes through a shell. */
 import { spawn } from 'node:child_process';
 
 export interface RunResult {
@@ -10,6 +10,8 @@ export interface RunResult {
 export interface RunOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /** Only for Windows batch files (npm.cmd), which Node cannot start without a shell. */
+  shell?: boolean;
 }
 
 export function run(command: string, args: readonly string[], options: RunOptions = {}): Promise<RunResult> {
@@ -17,6 +19,7 @@ export function run(command: string, args: readonly string[], options: RunOption
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env ?? process.env,
+      shell: options.shell ?? false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const stdout: Buffer[] = [];

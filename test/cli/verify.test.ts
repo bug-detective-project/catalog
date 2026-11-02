@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { formatTable, gatesOf, verifyTickets } from '../../src/cli/verify.ts';
+import { formatTable, gatesOf, npmInvocation, verifyTickets } from '../../src/cli/verify.ts';
 import type { RunQa } from '../../src/cli/verify.ts';
 import { useRealPatches } from '../helpers/patches.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
@@ -83,5 +83,16 @@ describe('bd verify', () => {
     const { rows } = await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa: noisy });
     expect(rows[0].ok).toBe(false);
     expect(rows[0].logs).toContain('gate 1 log of front-1');
+  });
+});
+
+describe('npmInvocation', () => {
+  it('runs npm directly on Linux and macOS', () => {
+    expect(npmInvocation('linux')).toEqual({ command: 'npm', shell: false });
+    expect(npmInvocation('darwin')).toEqual({ command: 'npm', shell: false });
+  });
+
+  it('runs npm.cmd through the shell on Windows, where npm is a batch file', () => {
+    expect(npmInvocation('win32')).toEqual({ command: 'npm.cmd', shell: true });
   });
 });

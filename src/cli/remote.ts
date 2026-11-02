@@ -35,13 +35,25 @@ export interface ValidateRemoteOptions {
   lsRemoteTags?: LsRemoteTags;
 }
 
-export const fetchZipFromGitHub: FetchZip = async (url) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new HttpError(url, response.status);
-  }
-  return new Uint8Array(await response.arrayBuffer());
-};
+/** Downloads a zip, giving up after timeoutMs (a stalled download must not hang the daily check). */
+export function fetchZipWithTimeout(timeoutMs: number): FetchZip {
+  return async (url) => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok) {
+        throw new HttpError(url, response.status);
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new Error(`${url} did not answer within ${timeoutMs / 1000} s`, { cause: error });
+      }
+      throw error;
+    }
+  };
+}
+
+export const fetchZipFromGitHub: FetchZip = fetchZipWithTimeout(120_000);
 
 /** The tags of a public repository and the commit each one points to (annotated tags peeled). */
 export const lsRemoteTagsFromGitHub: LsRemoteTags = async (repository) => {
