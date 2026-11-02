@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { parseCatalog, starterProject } from '../src/contract/index.ts';
 
 describe('projects.json', () => {
-  it('lists SupportDesk first', async () => {
-    const catalog = JSON.parse(await readFile(new URL('../projects.json', import.meta.url), 'utf8'));
-    expect(catalog.projects[0].id).toBe('supportdesk');
+  it('is a valid catalog that starts with SupportDesk', async () => {
+    const catalog = parseCatalog(JSON.parse(await readFile(new URL('../projects.json', import.meta.url), 'utf8')));
+    expect(starterProject(catalog).id).toBe('supportdesk');
   });
 });
