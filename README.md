@@ -35,6 +35,13 @@ The order of the list is the order of the cards on the Projects screen. Names, d
 technologies, difficulty and ticket counts come from each project's `qa` branch. Versions are never
 listed here: each project's `manifest.json` has its own.
 
+In a project's `qa` branch, `package.json` holds `bugDetective.project`: `id`, `name`, the optional
+`difficulty` (`beginner`, `intermediate` or `advanced`) and the optional `stack`
+(`{ "frontend": "React · Vite", "backend": "Node.js · Express", "database": "SQLite" }`, any of the
+three, up to 60 characters each). `bd build` and `bd publish` copy them into `manifest.json`. The
+texts live in `story.en.json` and `story.pt.json`, including the optional `project.skills`: 1 to 5
+skills the player practices, with the same count in every language (`bd validate` checks it).
+
 Change `projects.json` through a pull request: the `catalog` check validates the file and every
 listed project before the merge.
 

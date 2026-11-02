@@ -125,4 +125,24 @@ describe('project manifest', () => {
     expect(compareVersions('1.0.0', '1.0.0')).toBe(0);
     expect(compareVersions('1.0.0', '1.0.1')).toBeLessThan(0);
   });
+
+  it('accepts project.stack with any of frontend, backend and database', () => {
+    const stack = { frontend: 'React · Vite', backend: 'Node.js · Express', database: 'SQLite' };
+    expect(
+      parseManifest(manifest({ project: { id: 'supportdesk', name: 'SupportDesk', stack } })).project.stack,
+    ).toEqual(stack);
+    expect(
+      parseManifest(manifest({ project: { id: 'supportdesk', name: 'SupportDesk', stack: { frontend: 'React' } } }))
+        .project.stack,
+    ).toEqual({ frontend: 'React' });
+    expect(parseManifest(manifest()).project.stack).toBeUndefined();
+  });
+
+  it('refuses an empty, too long or unknown stack value', () => {
+    for (const stack of [{ frontend: '' }, { backend: 'x'.repeat(61) }, { mobile: 'Swift' }]) {
+      expect(() => parseManifest(manifest({ project: { id: 'supportdesk', name: 'SupportDesk', stack } }))).toThrow(
+        /Invalid project manifest/,
+      );
+    }
+  });
 });

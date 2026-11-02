@@ -28,6 +28,12 @@ export declare const ticketEntrySchema: z.ZodObject<{
         digest: z.ZodString;
     }, z.core.$strip>;
 }, z.core.$strip>;
+/** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */
+export declare const projectStackSchema: z.ZodObject<{
+    frontend: z.ZodOptional<z.ZodString>;
+    backend: z.ZodOptional<z.ZodString>;
+    database: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>;
 export declare const manifestSchema: z.ZodObject<{
     format: z.ZodLiteral<"bug-detective-project">;
     formatVersion: z.ZodNumber;
@@ -39,6 +45,11 @@ export declare const manifestSchema: z.ZodObject<{
             beginner: "beginner";
             intermediate: "intermediate";
         }>>;
+        stack: z.ZodOptional<z.ZodObject<{
+            frontend: z.ZodOptional<z.ZodString>;
+            backend: z.ZodOptional<z.ZodString>;
+            database: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>>;
     }, z.core.$strip>;
     version: z.ZodString;
     createdAt: z.ZodString;

@@ -113,4 +113,23 @@ describe('buildManifest', () => {
     expect((await build()).entries[0].package.digest).toBe(treeDigest(committed));
     expect(blob.length).toBeGreaterThan(0);
   });
+
+  it('copies bugDetective.project.stack into the manifest', async () => {
+    const stack = { frontend: 'React · Vite', database: 'SQLite' };
+    const pkg = JSON.parse(await readFile(join(repo.qaDir, 'package.json'), 'utf8'));
+    pkg.bugDetective.project.stack = stack;
+    await writeFile(join(repo.qaDir, 'package.json'), JSON.stringify(pkg));
+    expect((await build()).project.stack).toEqual(stack);
+  });
+
+  it('has no stack when package.json gives none', async () => {
+    expect((await build()).project).not.toHaveProperty('stack');
+  });
+
+  it('refuses an unknown stack key', async () => {
+    const pkg = JSON.parse(await readFile(join(repo.qaDir, 'package.json'), 'utf8'));
+    pkg.bugDetective.project.stack = { mobile: 'Swift' };
+    await writeFile(join(repo.qaDir, 'package.json'), JSON.stringify(pkg));
+    await expect(build()).rejects.toThrow(/bugDetective\.project\.stack/);
+  });
 });

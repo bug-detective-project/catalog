@@ -27,6 +27,12 @@ export const ticketEntrySchema = z.object({
         digest,
     }),
 });
+const stackValue = z.string().min(1).max(60);
+/** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */
+export const projectStackSchema = z
+    .object({ frontend: stackValue, backend: stackValue, database: stackValue })
+    .partial()
+    .strict();
 export const manifestSchema = z
     .object({
     format: z.literal('bug-detective-project'),
@@ -36,6 +42,7 @@ export const manifestSchema = z
         name: z.string().min(1).max(100),
         /** Shown on the Projects screen (package.json bugDetective.project.difficulty). */
         difficulty: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+        stack: projectStackSchema.optional(),
     }),
     version: z.string().regex(/^\d+\.\d+\.\d+$/),
     createdAt: z.string(),

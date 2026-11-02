@@ -5,6 +5,7 @@ export interface ProjectInfo {
     id: string;
     name: string;
     difficulty?: (typeof DIFFICULTIES)[number];
+    stack?: ProjectManifest['project']['stack'];
 }
 /** bugDetective.project of the qa folder's package.json. */
 export declare function readProject(qaDir: string): Promise<ProjectInfo>;

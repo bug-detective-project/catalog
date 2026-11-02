@@ -68,4 +68,31 @@ describe('files of the qa branch', () => {
   it('refuses a qa branch without its story', () => {
     expect(() => projectContentOf(qaFiles.filter((file) => file.path !== 'story.pt.json'))).toThrow(/story\.pt\.json/);
   });
+
+  describe('skills practiced', () => {
+    const files = (en: string[] | undefined, pt: string[] | undefined) => [
+      textFile('story.en.json', JSON.stringify({ ...story, project: { ...story.project, ...(en && { skills: en }) } })),
+      textFile('story.pt.json', JSON.stringify({ ...story, project: { ...story.project, ...(pt && { skills: pt }) } })),
+    ];
+
+    it('accepts 1 to 5 skills, in both languages', () => {
+      expect(projectContentOf(files(['Async and state'], ['Assincronia e estado'])).story.pt.project.skills).toEqual([
+        'Assincronia e estado',
+      ]);
+      expect(projectContentOf(files(undefined, undefined)).story.en.project.skills).toBeUndefined();
+    });
+
+    it('refuses no skill, more than 5 or an empty one', () => {
+      for (const skills of [[], ['a', 'b', 'c', 'd', 'e', 'f'], ['']]) {
+        expect(() => parseProjectStory({ ...story, project: { ...story.project, skills } }, 'story.en.json')).toThrow(
+          /skills/,
+        );
+      }
+    });
+
+    it('refuses skills with a different count in EN and PT', () => {
+      expect(() => projectContentOf(files(['A', 'B', 'C'], ['A', 'B']))).toThrow(/story\.pt\.json[\s\S]*skills/);
+      expect(() => projectContentOf(files(['A'], undefined))).toThrow(/story\.pt\.json[\s\S]*skills/);
+    });
+  });
 });
