@@ -49,6 +49,14 @@ export function projectContentOf(qaFiles: readonly ArchiveFile[]): ProjectFiles 
       return [language, parseProjectStory(json(file), name)];
     }),
   ) as Record<Language, ProjectStory>;
+  const skills = (language: Language) => story[language].project.skills?.length ?? 0;
+  for (const language of LANGUAGES) {
+    if (skills(language) !== skills(LANGUAGES[0])) {
+      throw new Error(
+        `story.${language}.json: project.skills has ${skills(language)} item(s), story.${LANGUAGES[0]}.json has ${skills(LANGUAGES[0])}: every language needs the same skills`,
+      );
+    }
+  }
   return { review: reviewOf(reviewFile ? json(reviewFile) : undefined), story };
 }
 

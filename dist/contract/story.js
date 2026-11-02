@@ -14,7 +14,13 @@ export const projectStorySchema = z.object({
         contacts: text,
         reporters: z.array(z.object({ name: text, role: text })),
     }),
-    project: z.object({ name: text, about: text, stack: text }),
+    project: z.object({
+        name: text,
+        about: text,
+        stack: text,
+        /** What the player practices in this project (1 to 5, the same count in every language). */
+        skills: z.array(z.string().min(1).max(60)).min(1).max(5).optional(),
+    }),
     messages: z.object({
         welcome: message,
         /** One message per ticket id (front-1, back-1, …); a ticket without one gets the generic text. */

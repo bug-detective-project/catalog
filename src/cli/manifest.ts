@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { treeDigest } from '../contract/archive.ts';
 import type { ArchiveFile } from '../contract/archive.ts';
-import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest } from '../contract/manifest.ts';
+import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
 import { projectContentOf } from '../contract/project-files.ts';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.ts';
@@ -15,11 +15,12 @@ export interface ProjectInfo {
   id: string;
   name: string;
   difficulty?: (typeof DIFFICULTIES)[number];
+  stack?: ProjectManifest['project']['stack'];
 }
 
 /** bugDetective.project of the qa folder's package.json. */
 export async function readProject(qaDir: string): Promise<ProjectInfo> {
-  let json: { bugDetective?: { project?: { id?: unknown; name?: unknown; difficulty?: unknown } } };
+  let json: { bugDetective?: { project?: { id?: unknown; name?: unknown; difficulty?: unknown; stack?: unknown } } };
   try {
     json = JSON.parse(await readFile(join(qaDir, 'package.json'), 'utf8'));
   } catch {
@@ -33,10 +34,22 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
   if (difficulty !== undefined && !DIFFICULTIES.includes(difficulty as ProjectInfo['difficulty'] & string)) {
     throw new Error(`${qaDir}/package.json: bugDetective.project.difficulty must be one of ${DIFFICULTIES.join(', ')}`);
   }
+  let stack: ProjectInfo['stack'];
+  if (project.stack !== undefined) {
+    const parsed = projectStackSchema.safeParse(project.stack);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      throw new Error(
+        `${qaDir}/package.json: bugDetective.project.stack${issue?.path.length ? `.${issue.path.join('.')}` : ''}: ${issue?.message ?? 'invalid'}`,
+      );
+    }
+    stack = parsed.data;
+  }
   return {
     id: project.id,
     name: project.name,
     ...(difficulty !== undefined && { difficulty: difficulty as ProjectInfo['difficulty'] }),
+    ...(stack !== undefined && { stack }),
   };
 }
 

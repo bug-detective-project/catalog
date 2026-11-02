@@ -19,6 +19,7 @@ export declare const projectStorySchema: z.ZodObject<{
         name: z.ZodString;
         about: z.ZodString;
         stack: z.ZodString;
+        skills: z.ZodOptional<z.ZodArray<z.ZodString>>;
     }, z.core.$strip>;
     messages: z.ZodObject<{
         welcome: z.ZodObject<{

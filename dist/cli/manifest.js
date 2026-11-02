@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { treeDigest } from '../contract/archive.js';
-import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest } from '../contract/manifest.js';
+import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.js';
 import { projectContentOf } from '../contract/project-files.js';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.js';
 import { ticketQueue, trackedTicketFiles } from './tickets.js';
@@ -24,10 +24,20 @@ export async function readProject(qaDir) {
     if (difficulty !== undefined && !DIFFICULTIES.includes(difficulty)) {
         throw new Error(`${qaDir}/package.json: bugDetective.project.difficulty must be one of ${DIFFICULTIES.join(', ')}`);
     }
+    let stack;
+    if (project.stack !== undefined) {
+        const parsed = projectStackSchema.safeParse(project.stack);
+        if (!parsed.success) {
+            const issue = parsed.error.issues[0];
+            throw new Error(`${qaDir}/package.json: bugDetective.project.stack${issue?.path.length ? `.${issue.path.join('.')}` : ''}: ${issue?.message ?? 'invalid'}`);
+        }
+        stack = parsed.data;
+    }
     return {
         id: project.id,
         name: project.name,
         ...(difficulty !== undefined && { difficulty: difficulty }),
+        ...(stack !== undefined && { stack }),
     };
 }
 /** Files and folders every tickets/<id>/ must have. */

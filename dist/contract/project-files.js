@@ -34,6 +34,12 @@ export function projectContentOf(qaFiles) {
         }
         return [language, parseProjectStory(json(file), name)];
     }));
+    const skills = (language) => story[language].project.skills?.length ?? 0;
+    for (const language of LANGUAGES) {
+        if (skills(language) !== skills(LANGUAGES[0])) {
+            throw new Error(`story.${language}.json: project.skills has ${skills(language)} item(s), story.${LANGUAGES[0]}.json has ${skills(LANGUAGES[0])}: every language needs the same skills`);
+        }
+    }
     return { review: reviewOf(reviewFile ? json(reviewFile) : undefined), story };
 }
 function reviewOf(raw) {
