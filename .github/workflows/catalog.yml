@@ -1,0 +1,23 @@
+name: catalog
+
+# Checks projects.json and every listed project as players download it: on every pull request
+# into main, and once a day (GitHub disables this schedule after 60 days without activity in the
+# repository; re-enable it in the Actions tab).
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.12.1
+          cache: npm
+      - run: npm ci
+      - run: node dist/cli/main.js catalog-check

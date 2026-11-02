@@ -10,7 +10,7 @@ describe('the bd command', () => {
   it('lists its commands with --help', () => {
     const result = bd('--help');
     expect(result.status).toBe(0);
-    for (const command of ['build', 'verify', 'validate', 'publish']) {
+    for (const command of ['build', 'verify', 'validate', 'publish', 'catalog-check']) {
       expect(result.stdout).toContain(`bd ${command}`);
     }
   });

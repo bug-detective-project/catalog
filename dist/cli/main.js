@@ -2,6 +2,7 @@
 /** The bd command: Bug Detective authoring tools, run inside a project's qa folder. */
 import { parseArgs } from 'node:util';
 import { buildTickets } from './build.js';
+import { checkCatalog } from './catalog-check.js';
 import { gitIn } from './git.js';
 import { publishProject } from './publish.js';
 import { validateRemote } from './remote.js';
@@ -15,6 +16,8 @@ const HELP = `Usage: bd <command> [options]   (inside a project's qa folder)
   bd validate --remote <owner/repo> [--ref qa] [--project <id>]
                                          check a project as players download it from GitHub
   bd publish --version X.Y.Z [--dry-run] write the manifest, tag, commit and push (never qa)
+  bd catalog-check [--file projects.json]
+                                         check the catalog and every listed project (catalog repository)
 `;
 const log = (line) => console.log(line);
 async function qaFolder() {
@@ -67,6 +70,11 @@ async function main(argv) {
                 return 2;
             }
             await publishProject({ qaDir: await qaFolder(), version: values.version, dryRun: values['dry-run'], log });
+            return 0;
+        }
+        case 'catalog-check': {
+            const { values } = parseArgs({ args: rest, options: { file: { type: 'string', default: 'projects.json' } } });
+            await checkCatalog({ file: values.file, log });
             return 0;
         }
         default:
