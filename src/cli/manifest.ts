@@ -1,6 +1,13 @@
 /** Builds a project's manifest from its qa folder (a worktree of the qa branch) and its ticket branches. */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { treeDigest } from '../contract/archive.ts';
+import type { ArchiveFile } from '../contract/archive.ts';
+import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest } from '../contract/manifest.ts';
+import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
+import { projectContentOf } from '../contract/project-files.ts';
+import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.ts';
+import { ticketQueue, trackedTicketFiles } from './tickets.ts';
 
 const DIFFICULTIES = ['beginner', 'intermediate', 'advanced'] as const;
 
@@ -31,4 +38,117 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
     name: project.name,
     ...(difficulty !== undefined && { difficulty: difficulty as ProjectInfo['difficulty'] }),
   };
+}
+
+/** Files and folders every tickets/<id>/ must have. */
+export const REQUIRED_TICKET_FILES = [
+  'bug.patch',
+  'gate1/',
+  'gate2/',
+  'ticket.en.md',
+  'ticket.pt.md',
+  'hints.en.json',
+  'hints.pt.json',
+  'reference.patch',
+  'review.en.md',
+  'review.pt.md',
+  'solution.en.md',
+  'solution.pt.md',
+];
+
+export const SEMVER = /^\d+\.\d+\.\d+$/;
+
+/** The player's package of a ticket: its committed files without PACKAGE_EXCLUDED, with LF line endings. */
+async function ticketPackage(qaDir: string, id: string, files: string[]): Promise<ArchiveFile[]> {
+  const prefix = `tickets/${id}/`;
+  const own = files.filter((file) => file.startsWith(prefix)).map((file) => file.slice(prefix.length));
+  for (const required of REQUIRED_TICKET_FILES) {
+    const present = required.endsWith('/') ? own.some((file) => file.startsWith(required)) : own.includes(required);
+    if (!present) {
+      throw new Error(`tickets/${id} has no ${required}`);
+    }
+  }
+  const result: ArchiveFile[] = [];
+  for (const path of own.filter((file) => !PACKAGE_EXCLUDED.has(file))) {
+    const data = normalizeLineEndings(await readFile(join(qaDir, ...prefix.split('/'), ...path.split('/'))));
+    result.push({ path, data: new Uint8Array(data), executable: false });
+  }
+  return result;
+}
+
+/**
+ * Every committed file of the qa folder, read from disk with LF line endings (the content a
+ * download of the qa branch gives, before it is published).
+ */
+export async function readQaFiles(qaDir: string): Promise<ArchiveFile[]> {
+  const paths = (await gitIn(qaDir).text('ls-files', '-z')).split('\0').filter(Boolean);
+  const files: ArchiveFile[] = [];
+  for (const path of paths) {
+    const data = await readFile(join(qaDir, ...path.split('/'))).catch(() => null);
+    if (data) {
+      files.push({ path, data: new Uint8Array(normalizeLineEndings(data)), executable: false });
+    }
+  }
+  return files;
+}
+
+export interface BuildManifestOptions {
+  qaDir: string;
+  version: string;
+  now?: string;
+}
+
+/** Reads the qa folder and the ticket branches into a manifest. Writes nothing. */
+export async function buildManifest({ qaDir, version, now }: BuildManifestOptions): Promise<ProjectManifest> {
+  if (!SEMVER.test(version)) {
+    throw new Error(`Invalid version ${version}: use X.Y.Z`);
+  }
+  const project = await readProject(qaDir);
+  const git = gitIn(qaDir);
+  // The story and the review configuration must be valid before anything is published.
+  const projectFiles = (await readQaFiles(qaDir)).filter((file) => !file.path.startsWith('tickets/'));
+  projectContentOf(projectFiles);
+  const files = await trackedTicketFiles(git);
+  const queue = ticketQueue([...new Set(files.map((file) => file.split('/')[1]))]);
+  if (queue.length === 0) {
+    throw new Error(`${qaDir}/tickets has no ticket folders`);
+  }
+
+  const entries: TicketEntry[] = [];
+  for (const id of queue) {
+    const packageFiles = await ticketPackage(qaDir, id, files);
+    const ref = await resolveBranchRef(qaDir, id);
+    const commit = await git.text('rev-parse', `${ref}^{commit}`);
+    const codeFiles = await gitArchive(qaDir, commit);
+    const existing = (await git.text('tag', '--points-at', commit, '--sort=-v:refname', '-l', `${id}-v*`))
+      .split('\n')
+      .filter(Boolean)[0];
+    const [track, order] = id.split('-');
+    entries.push({
+      id,
+      track: track as TicketEntry['track'],
+      order: Number(order),
+      branch: id,
+      tag: existing ?? `${id}-v${version}`,
+      commit,
+      commitMessage: await git.text('log', '-1', '--format=%s', commit),
+      codeDigest: treeDigest(codeFiles),
+      codeFiles: codeFiles.length,
+      package: { path: `tickets/${id}`, files: packageFiles.length, digest: treeDigest(packageFiles) },
+    });
+  }
+
+  return parseManifest({
+    format: 'bug-detective-project',
+    formatVersion: SUPPORTED_FORMAT_VERSION,
+    project,
+    version,
+    createdAt: now ?? new Date().toISOString(),
+    tickets: {
+      total: entries.length,
+      front: entries.filter((entry) => entry.track === 'front').length,
+      back: entries.filter((entry) => entry.track === 'back').length,
+    },
+    entries,
+  });
 }

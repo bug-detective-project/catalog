@@ -1,0 +1,98 @@
+/**
+ * bd validate: checks the qa folder before its pull request is merged. The committed
+ * manifest.json must describe exactly the committed tickets, the ticket branches and their tags,
+ * and its version must be newer than the published one.
+ */
+import { compareVersions, parseManifest } from '../contract/manifest.ts';
+import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
+import { buildManifest } from './manifest.ts';
+import { gitIn } from './git.ts';
+import { run } from './process.ts';
+
+export interface ValidateLocalOptions {
+  qaDir: string;
+  /** Where the published manifest is: the base branch of the pull request. */
+  baseRef?: string;
+}
+
+/** The manifest.json committed at a ref, or undefined when the ref or the file does not exist. */
+async function manifestAt(qaDir: string, ref: string): Promise<unknown> {
+  const result = await run('git', ['-c', 'safe.directory=*', '-C', qaDir, 'show', `${ref}:manifest.json`]);
+  return result.code === 0 ? JSON.parse(result.stdout.toString('utf8')) : undefined;
+}
+
+/** The fields of an entry that differ from what the ticket branch and folder give. */
+function differences(published: TicketEntry, rebuilt: TicketEntry): string[] {
+  return (Object.keys(rebuilt) as (keyof TicketEntry)[]).filter(
+    (key) => JSON.stringify(published[key]) !== JSON.stringify(rebuilt[key]),
+  );
+}
+
+export async function validateLocal({ qaDir, baseRef = 'origin/qa' }: ValidateLocalOptions): Promise<ProjectManifest> {
+  const git = gitIn(qaDir);
+  const problems: string[] = [];
+
+  const dirty = await git.text('status', '--porcelain', '--untracked-files=no', '--', 'tickets');
+  if (dirty) {
+    problems.push(`These ticket files are not committed (players only get committed files):\n${dirty}`);
+  }
+
+  const raw = await manifestAt(qaDir, 'HEAD');
+  if (raw === undefined) {
+    throw new Error('The qa branch has no committed manifest.json: run bd publish first');
+  }
+  const manifest = parseManifest(raw);
+
+  try {
+    const rebuilt = await buildManifest({ qaDir, version: manifest.version, now: manifest.createdAt });
+    if (
+      rebuilt.project.id !== manifest.project.id ||
+      JSON.stringify(rebuilt.tickets) !== JSON.stringify(manifest.tickets)
+    ) {
+      problems.push('manifest.json does not list the tickets of tickets/: run bd publish again');
+    }
+    for (const entry of manifest.entries) {
+      const fresh = rebuilt.entries.find((item) => item.id === entry.id);
+      const changed = fresh ? differences(entry, fresh) : [];
+      if (changed.length > 0) {
+        problems.push(`${entry.id}: manifest.json does not match the ticket (${changed.join(', ')})`);
+      }
+    }
+  } catch (error) {
+    problems.push((error as Error).message);
+  }
+
+  for (const entry of manifest.entries) {
+    const tagged = await run('git', [
+      '-c',
+      'safe.directory=*',
+      '-C',
+      qaDir,
+      'rev-parse',
+      '--verify',
+      '--quiet',
+      `refs/tags/${entry.tag}^{commit}`,
+    ]);
+    const commit = tagged.stdout.toString('utf8').trim();
+    if (tagged.code !== 0) {
+      problems.push(`${entry.id}: the tag ${entry.tag} does not exist`);
+    } else if (commit !== entry.commit) {
+      problems.push(
+        `${entry.id}: the tag ${entry.tag} points to ${commit.slice(0, 12)}, not to the manifest's ${entry.commit.slice(0, 12)}`,
+      );
+    }
+  }
+
+  const base = await manifestAt(qaDir, baseRef);
+  if (base !== undefined) {
+    const published = (base as { version?: unknown }).version;
+    if (typeof published === 'string' && compareVersions(manifest.version, published) <= 0) {
+      problems.push(`The version ${manifest.version} must be newer than ${published}, published on ${baseRef}`);
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(problems.join('\n'));
+  }
+  return manifest;
+}
