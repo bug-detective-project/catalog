@@ -21,7 +21,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli/main.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "format": "prettier --write .",

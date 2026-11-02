@@ -1,0 +1,88 @@
+/**
+ * bd verify: runs the project's QA tool on every ticket branch, before and after its
+ * reference.patch. Expected for every ticket:
+ *   buggy: Gate 1 passes, Gate 2 fails   fixed: Gate 1 passes, Gate 2 passes
+ */
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { gitIn, resolveBranchRef } from './git.js';
+import { run } from './process.js';
+import { ticketIdsOf } from './tickets.js';
+/** The outcome of each gate: the result names the gate that failed or timed out (2 when passed). */
+export function gatesOf(result) {
+    if (result.gate === 1) {
+        return [result.status === 'timeout' ? 'timeout' : 'fail', 'not-run'];
+    }
+    return ['pass', result.status === 'passed' ? 'pass' : result.status === 'timeout' ? 'timeout' : 'fail'];
+}
+/** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
+export const npmQa = async ({ qaDir, id, position, workspace }) => {
+    const out = join(await mkdtemp(join(tmpdir(), 'bd-qa-')), 'result.json');
+    try {
+        const args = [
+            'run',
+            '--silent',
+            'qa',
+            '--',
+            '--ticket',
+            String(position),
+            '--package',
+            `tickets/${id}`,
+            '--workspace',
+            workspace,
+            '--json',
+            out,
+        ];
+        const result = await run('npm', args, { cwd: qaDir });
+        const json = await readFile(out, 'utf8').catch(() => {
+            throw new Error(`${id}: the QA tool wrote no result (exit ${result.code}):\n${result.stdout}${result.stderr}`);
+        });
+        return JSON.parse(json);
+    }
+    finally {
+        await rm(join(out, '..'), { recursive: true, force: true });
+    }
+};
+export async function verifyTickets({ qaDir, ids, runQa = npmQa, }) {
+    const git = gitIn(qaDir);
+    const queue = await ticketIdsOf(git);
+    const rows = [];
+    for (const id of ids ?? queue) {
+        const position = queue.indexOf(id) + 1;
+        if (position === 0) {
+            throw new Error(`Unknown ticket: ${id}`);
+        }
+        const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
+        const workspace = join(scratch, id);
+        try {
+            await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
+            const buggy = gatesOf(await runQa({ qaDir, id, position, workspace }));
+            const applied = await gitIn(workspace)
+                .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
+                .then(() => true, () => false);
+            const fixed = applied
+                ? gatesOf(await runQa({ qaDir, id, position, workspace }))
+                : 'patch-failed';
+            const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
+            rows.push({ id, buggy, fixed, ok });
+        }
+        finally {
+            await git.text('worktree', 'remove', '--force', workspace).catch(() => { });
+            await rm(scratch, { recursive: true, force: true });
+        }
+    }
+    return { rows, ok: rows.every((row) => row.ok) };
+}
+/** The verification matrix as a Markdown table. */
+export function formatTable(rows) {
+    const lines = [
+        '| Ticket | Gate 1 on buggy ticket | Gate 2 on buggy ticket | Gate 1 after reference.patch | Gate 2 after reference.patch | Result |',
+        '| --- | --- | --- | --- | --- | --- |',
+    ];
+    for (const row of rows) {
+        const fixed = row.fixed === 'patch-failed' ? ['patch-failed', 'patch-failed'] : row.fixed;
+        lines.push(`| ${row.id} | ${row.buggy[0]} | ${row.buggy[1]} | ${fixed[0]} | ${fixed[1]} | ${row.ok ? 'OK' : 'UNEXPECTED'} |`);
+    }
+    return lines.join('\n');
+}
