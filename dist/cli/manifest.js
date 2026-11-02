@@ -46,8 +46,11 @@ export const REQUIRED_TICKET_FILES = [
     'solution.pt.md',
 ];
 export const SEMVER = /^\d+\.\d+\.\d+$/;
-/** The player's package of a ticket: its committed files without PACKAGE_EXCLUDED, with LF line endings. */
-async function ticketPackage(qaDir, id, files) {
+/**
+ * The player's package of a ticket: its committed files (the blobs GitHub serves, so the digest
+ * matches the download byte for byte) without PACKAGE_EXCLUDED.
+ */
+function ticketPackage(id, files, committed) {
     const prefix = `tickets/${id}/`;
     const own = files.filter((file) => file.startsWith(prefix)).map((file) => file.slice(prefix.length));
     for (const required of REQUIRED_TICKET_FILES) {
@@ -56,12 +59,9 @@ async function ticketPackage(qaDir, id, files) {
             throw new Error(`tickets/${id} has no ${required}`);
         }
     }
-    const result = [];
-    for (const path of own.filter((file) => !PACKAGE_EXCLUDED.has(file))) {
-        const data = normalizeLineEndings(await readFile(join(qaDir, ...prefix.split('/'), ...path.split('/'))));
-        result.push({ path, data: new Uint8Array(data), executable: false });
-    }
-    return result;
+    return committed
+        .filter((file) => file.path.startsWith(prefix) && !PACKAGE_EXCLUDED.has(file.path.slice(prefix.length)))
+        .map((file) => ({ ...file, path: file.path.slice(prefix.length) }));
 }
 /**
  * Every committed file of the qa folder, read from disk with LF line endings (the content a
@@ -93,9 +93,10 @@ export async function buildManifest({ qaDir, version, now }) {
     if (queue.length === 0) {
         throw new Error(`${qaDir}/tickets has no ticket folders`);
     }
+    const committed = await gitArchive(qaDir, 'HEAD');
     const entries = [];
     for (const id of queue) {
-        const packageFiles = await ticketPackage(qaDir, id, files);
+        const packageFiles = ticketPackage(id, files, committed);
         const ref = await resolveBranchRef(qaDir, id);
         const commit = await git.text('rev-parse', `${ref}^{commit}`);
         const codeFiles = await gitArchive(qaDir, commit);

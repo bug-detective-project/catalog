@@ -1,6 +1,8 @@
 export interface QaResult {
     gate: 1 | 2;
     status: 'passed' | 'failed' | 'timeout';
+    /** What the QA tool printed, shown for unexpected rows. */
+    output?: string;
 }
 export type GateOutcome = 'pass' | 'fail' | 'timeout' | 'not-run';
 export type Gates = [GateOutcome, GateOutcome];
@@ -9,6 +11,8 @@ export interface VerifyRow {
     buggy: Gates;
     fixed: Gates | 'patch-failed';
     ok: boolean;
+    /** The QA output of both runs, kept only when the row is unexpected. */
+    logs?: string;
 }
 /** Runs the QA tool on a workspace; `position` is the ticket's place in the queue (1 = front-1). */
 export type RunQa = (args: {

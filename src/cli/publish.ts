@@ -57,7 +57,7 @@ export async function publishProject(options: PublishOptions): Promise<{ manifes
     throw new Error(`Tags for version ${version} already exist`);
   }
   // Players download the committed tickets/, so the manifest must describe exactly those files.
-  const dirty = await git.text('status', '--porcelain', '--untracked-files=no', '--', 'tickets');
+  const dirty = await git.text('status', '--porcelain', '--', 'tickets');
   if (dirty) {
     throw new Error(`Commit the ticket files first; these are not committed:\n${dirty}`);
   }
@@ -85,9 +85,25 @@ export async function publishProject(options: PublishOptions): Promise<{ manifes
     const branches = manifest.entries.map((entry) => entry.branch);
     // Only this project's ticket tags: a clone may carry other tags that must not be published.
     const tags = [...new Set(manifest.entries.map((entry) => entry.tag))];
-    await git.text('push', '--quiet', '--force-with-lease', 'origin', ...branches);
-    await git.text('push', '--quiet', 'origin', ...tags);
-    await git.text('push', '--quiet', '--set-upstream', 'origin', branch);
+    const pushes = [
+      ['push', '--force-with-lease', 'origin', ...branches],
+      ['push', 'origin', ...tags],
+      ['push', '--set-upstream', 'origin', branch],
+    ];
+    for (const [index, args] of pushes.entries()) {
+      try {
+        await git.text(...args);
+      } catch (error) {
+        // Everything local is done; re-running bd publish would refuse the same version.
+        const left = pushes.slice(index).map((rest) => `  git ${rest.join(' ')}`);
+        throw new Error(
+          `${(error as Error).message}\n\nThe publication is committed and tagged locally. Fix the cause, then run:\n${left.join('\n')}`,
+          {
+            cause: error,
+          },
+        );
+      }
+    }
     log(`Pushed ${branches.join(' ')}, the tags and ${branch}`);
   }
   log(`Open the pull request into qa: ${prUrl}`);

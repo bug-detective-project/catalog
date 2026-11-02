@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -20,4 +23,9 @@ jobs:
       - name: dist matches the sources
         run: |
           npm run build
-          git diff --exit-code -- dist || { echo "dist is out of date: run npm run build and commit dist/"; exit 1; }
+          # Also catches new files under dist/ that were never committed.
+          if [ -n "$(git status --porcelain -- dist)" ]; then
+            git status --porcelain -- dist
+            echo "dist is out of date: run npm run build and commit dist/"
+            exit 1
+          fi

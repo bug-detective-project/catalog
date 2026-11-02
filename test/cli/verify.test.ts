@@ -72,4 +72,16 @@ describe('bd verify', () => {
     expect(rows[1]).toMatchObject({ id: 'front-2', fixed: 'patch-failed', ok: false });
     expect(formatTable(rows)).toContain('| front-2 | pass | fail | patch-failed | patch-failed | UNEXPECTED |');
   });
+
+  it('keeps the QA output of an unexpected row, to show where it failed', async () => {
+    const noisy: RunQa = async (args) => ({
+      ...(await runQa(args)),
+      gate: 1,
+      status: 'failed',
+      output: `gate 1 log of ${args.id}`,
+    });
+    const { rows } = await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa: noisy });
+    expect(rows[0].ok).toBe(false);
+    expect(rows[0].logs).toContain('gate 1 log of front-1');
+  });
 });

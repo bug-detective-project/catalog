@@ -45,6 +45,9 @@ async function main(argv: string[]): Promise<number> {
         qaDir: await qaFolder(),
         ids: positionals.length > 0 ? positionals : undefined,
       });
+      for (const row of rows.filter((item) => !item.ok)) {
+        console.error(`${row.id}: unexpected result\n${row.logs ?? ''}`);
+      }
       console.log(formatTable(rows));
       return ok ? 0 : 1;
     }

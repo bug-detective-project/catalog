@@ -14,6 +14,9 @@ jobs:
   validate:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # The pull request's own code runs here (npm ci, the QA tool): never with a write token.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:

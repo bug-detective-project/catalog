@@ -55,4 +55,15 @@ describe('bd validate', () => {
     repo.git(repo.qaDir, 'commit', '-q', '-m', 'Drop the manifest');
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(/manifest\.json/);
   });
+
+  it('refuses ticket files that are not tracked', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-2', 'gate1', 'extra.test.txt'), 'x\n');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /not committed.*tickets\/front-2\/gate1\/extra\.test\.txt/s,
+    );
+  });
+
+  it('refuses a base ref that does not exist instead of skipping the version check', async () => {
+    await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'origin/typo' })).rejects.toThrow(/origin\/typo/);
+  });
 });

@@ -13,6 +13,8 @@ import { ticketIdsOf } from './tickets.ts';
 export interface QaResult {
   gate: 1 | 2;
   status: 'passed' | 'failed' | 'timeout';
+  /** What the QA tool printed, shown for unexpected rows. */
+  output?: string;
 }
 
 export type GateOutcome = 'pass' | 'fail' | 'timeout' | 'not-run';
@@ -23,6 +25,8 @@ export interface VerifyRow {
   buggy: Gates;
   fixed: Gates | 'patch-failed';
   ok: boolean;
+  /** The QA output of both runs, kept only when the row is unexpected. */
+  logs?: string;
 }
 
 /** Runs the QA tool on a workspace; `position` is the ticket's place in the queue (1 = front-1). */
@@ -65,7 +69,7 @@ export const npmQa: RunQa = async ({ qaDir, id, position, workspace }) => {
     const json = await readFile(out, 'utf8').catch(() => {
       throw new Error(`${id}: the QA tool wrote no result (exit ${result.code}):\n${result.stdout}${result.stderr}`);
     });
-    return JSON.parse(json) as QaResult;
+    return { ...(JSON.parse(json) as QaResult), output: `${result.stdout}${result.stderr}` };
   } finally {
     await rm(join(out, '..'), { recursive: true, force: true });
   }
@@ -88,18 +92,22 @@ export async function verifyTickets({
     const workspace = join(scratch, id);
     try {
       await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
-      const buggy = gatesOf(await runQa({ qaDir, id, position, workspace }));
+      const buggyRun = await runQa({ qaDir, id, position, workspace });
+      const buggy = gatesOf(buggyRun);
       const applied = await gitIn(workspace)
         .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
         .then(
           () => true,
           () => false,
         );
-      const fixed: VerifyRow['fixed'] = applied
-        ? gatesOf(await runQa({ qaDir, id, position, workspace }))
-        : 'patch-failed';
+      const fixedRun = applied ? await runQa({ qaDir, id, position, workspace }) : undefined;
+      const fixed: VerifyRow['fixed'] = fixedRun ? gatesOf(fixedRun) : 'patch-failed';
       const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
-      rows.push({ id, buggy, fixed, ok });
+      const logs = [
+        `--- buggy run\n${buggyRun.output ?? ''}`,
+        `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
+      ].join('\n');
+      rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
     } finally {
       await git.text('worktree', 'remove', '--force', workspace).catch(() => {});
       await rm(scratch, { recursive: true, force: true });

@@ -2,6 +2,8 @@ import { mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { treeDigest } from '../../src/contract/archive.ts';
+import { gitArchive } from '../../src/cli/git.ts';
 import { buildManifest } from '../../src/cli/manifest.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
 import type { ProjectRepo } from '../helpers/project-repo.ts';
@@ -96,5 +98,19 @@ describe('buildManifest', () => {
     await expect(buildManifest({ qaDir: repo.qaDir, version: '1.0' })).rejects.toThrow(/X\.Y\.Z/);
     await unlink(join(repo.qaDir, 'package.json'));
     await expect(build()).rejects.toThrow(/package\.json/);
+  });
+
+  it('digests the committed files, as GitHub serves them, even when they have CRLF line endings', async () => {
+    repo.git(repo.qaDir, 'config', 'core.autocrlf', 'false');
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'ticket.en.md'), '# front-1\r\n');
+    repo.git(repo.qaDir, 'commit', '-q', '-am', 'CRLF card');
+    const blob = Buffer.from(repo.git(repo.qaDir, 'cat-file', '-p', 'HEAD:tickets/front-1/ticket.en.md') + '\n');
+    const files = await gitArchive(repo.qaDir, 'HEAD');
+    const committed = files
+      .filter((file) => file.path.startsWith('tickets/front-1/') && !file.path.endsWith('bug.patch'))
+      .map((file) => ({ ...file, path: file.path.slice('tickets/front-1/'.length) }));
+    expect(committed.find((file) => file.path === 'ticket.en.md')!.data.includes(13)).toBe(true);
+    expect((await build()).entries[0].package.digest).toBe(treeDigest(committed));
+    expect(blob.length).toBeGreaterThan(0);
   });
 });

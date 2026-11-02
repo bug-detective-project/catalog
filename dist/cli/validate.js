@@ -19,7 +19,7 @@ function differences(published, rebuilt) {
 export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
     const git = gitIn(qaDir);
     const problems = [];
-    const dirty = await git.text('status', '--porcelain', '--untracked-files=no', '--', 'tickets');
+    const dirty = await git.text('status', '--porcelain', '--', 'tickets');
     if (dirty) {
         problems.push(`These ticket files are not committed (players only get committed files):\n${dirty}`);
     }
@@ -63,6 +63,19 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
         else if (commit !== entry.commit) {
             problems.push(`${entry.id}: the tag ${entry.tag} points to ${commit.slice(0, 12)}, not to the manifest's ${entry.commit.slice(0, 12)}`);
         }
+    }
+    const baseExists = await run('git', [
+        '-c',
+        'safe.directory=*',
+        '-C',
+        qaDir,
+        'rev-parse',
+        '--verify',
+        '--quiet',
+        `${baseRef}^{commit}`,
+    ]);
+    if (baseExists.code !== 0) {
+        throw new Error(`The base ref ${baseRef} does not exist: fetch it ("git fetch origin") or pass --base-ref`);
     }
     const base = await manifestAt(qaDir, baseRef);
     if (base !== undefined) {

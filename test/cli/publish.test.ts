@@ -90,6 +90,27 @@ describe('bd publish', () => {
   });
 });
 
+describe('bd publish, review fixes', () => {
+  it('refuses ticket files that are not tracked, such as a gate1 file bd build created', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'gate1', 'back-2.test.txt'), 'new regression\n');
+    await expect(publish('1.0.0')).rejects.toThrow(/not committed.*tickets\/front-1\/gate1\/back-2\.test\.txt/s);
+  });
+
+  it('prints the pushes that are left when one fails, so the author can finish by hand', async () => {
+    // Someone else moved front-1 on origin; the lease (our origin/front-1) is now stale.
+    const stale = repo.git(repo.qaDir, 'rev-parse', 'origin/front-1');
+    repo.git(repo.projectDir, 'push', '-q', '--force', 'origin', 'main:front-1');
+    repo.git(repo.projectDir, 'update-ref', 'refs/remotes/origin/front-1', stale);
+
+    const error = await publish('1.0.0', { push: true }).catch((caught: Error) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('git push --force-with-lease origin front-1 front-2 back-1');
+    expect((error as Error).message).toContain('git push origin front-1-v1.0.0 front-2-v1.0.0 back-1-v1.0.0');
+    expect((error as Error).message).toContain('git push --set-upstream origin publish/1.0.0');
+  });
+});
+
 describe('repositoryFromRemote', () => {
   it.each([
     ['git@github.com:bug-detective-project/supportdesk.git', 'bug-detective-project/supportdesk'],
