@@ -55,6 +55,17 @@ describe('bd verify', () => {
     expect(repo.git(repo.qaDir, 'worktree', 'list').split('\n')).toHaveLength(2);
   });
 
+  it('reports each ticket as it starts and as it finishes, before the whole run ends', async () => {
+    const lines: string[] = [];
+    await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1', 'back-1'], runQa, log: (line) => lines.push(line) });
+    expect(lines).toEqual([
+      'front-1: running QA (1/2)…',
+      'front-1: buggy=(pass, fail) fixed=(pass, pass) OK',
+      'back-1: running QA (2/2)…',
+      'back-1: buggy=(pass, fail) fixed=(pass, pass) OK',
+    ]);
+  });
+
   it('verifies only the tickets asked for', async () => {
     const { rows } = await verifyTickets({ qaDir: repo.qaDir, ids: ['back-1'], runQa });
     expect(rows.map((row) => row.id)).toEqual(['back-1']);

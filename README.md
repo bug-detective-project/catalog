@@ -48,7 +48,7 @@ package and its code against the manifest.
 Depend on a tagged version, never on `main`:
 
 ```json
-"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.0.1"
+"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.0.2"
 ```
 
 `dist/` is committed, because Node does not run TypeScript from `node_modules` and pnpm does not
@@ -102,7 +102,7 @@ on:
 
 jobs:
   project:
-    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.0.1
+    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.0.2
     permissions:
       contents: write
 ```

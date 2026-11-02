@@ -40,6 +40,7 @@ async function main(argv) {
             const { rows, ok } = await verifyTickets({
                 qaDir: await qaFolder(),
                 ids: positionals.length > 0 ? positionals : undefined,
+                log,
             });
             for (const row of rows.filter((item) => !item.ok)) {
                 console.error(`${row.id}: unexpected result\n${row.logs ?? ''}`);

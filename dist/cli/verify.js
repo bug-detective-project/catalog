@@ -53,15 +53,17 @@ export const npmQa = async ({ qaDir, id, position, workspace }) => {
         await rm(join(out, '..'), { recursive: true, force: true });
     }
 };
-export async function verifyTickets({ qaDir, ids, runQa = npmQa, }) {
+export async function verifyTickets({ qaDir, ids, runQa = npmQa, log = () => { }, }) {
     const git = gitIn(qaDir);
     const queue = await ticketIdsOf(git);
     const rows = [];
-    for (const id of ids ?? queue) {
+    const selected = ids ?? queue;
+    for (const [index, id] of selected.entries()) {
         const position = queue.indexOf(id) + 1;
         if (position === 0) {
             throw new Error(`Unknown ticket: ${id}`);
         }
+        log(`${id}: running QA (${index + 1}/${selected.length})…`);
         const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
         const workspace = join(scratch, id);
         try {
@@ -79,6 +81,8 @@ export async function verifyTickets({ qaDir, ids, runQa = npmQa, }) {
                 `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
             ].join('\n');
             rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
+            const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
+            log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
         }
         finally {
             await git.text('worktree', 'remove', '--force', workspace).catch(() => { });

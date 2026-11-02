@@ -26,6 +26,8 @@ export interface VerifyOptions {
     /** Default: every ticket. */
     ids?: string[];
     runQa?: RunQa;
+    /** Progress, one line as each ticket starts and one as it ends (the table only comes at the end). */
+    log?: (line: string) => void;
 }
 /** The outcome of each gate: the result names the gate that failed or timed out (2 when passed). */
 export declare function gatesOf(result: QaResult): Gates;
@@ -36,7 +38,7 @@ export declare function npmInvocation(platform: NodeJS.Platform): {
 };
 /** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
 export declare const npmQa: RunQa;
-export declare function verifyTickets({ qaDir, ids, runQa, }: VerifyOptions): Promise<{
+export declare function verifyTickets({ qaDir, ids, runQa, log, }: VerifyOptions): Promise<{
     rows: VerifyRow[];
     ok: boolean;
 }>;

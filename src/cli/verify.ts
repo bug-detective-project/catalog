@@ -37,6 +37,8 @@ export interface VerifyOptions {
   /** Default: every ticket. */
   ids?: string[];
   runQa?: RunQa;
+  /** Progress, one line as each ticket starts and one as it ends (the table only comes at the end). */
+  log?: (line: string) => void;
 }
 
 /** The outcome of each gate: the result names the gate that failed or timed out (2 when passed). */
@@ -89,15 +91,18 @@ export async function verifyTickets({
   qaDir,
   ids,
   runQa = npmQa,
+  log = () => {},
 }: VerifyOptions): Promise<{ rows: VerifyRow[]; ok: boolean }> {
   const git = gitIn(qaDir);
   const queue = await ticketIdsOf(git);
   const rows: VerifyRow[] = [];
-  for (const id of ids ?? queue) {
+  const selected = ids ?? queue;
+  for (const [index, id] of selected.entries()) {
     const position = queue.indexOf(id) + 1;
     if (position === 0) {
       throw new Error(`Unknown ticket: ${id}`);
     }
+    log(`${id}: running QA (${index + 1}/${selected.length})…`);
     const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
     const workspace = join(scratch, id);
     try {
@@ -118,6 +123,8 @@ export async function verifyTickets({
         `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
       ].join('\n');
       rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
+      const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
+      log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
     } finally {
       await git.text('worktree', 'remove', '--force', workspace).catch(() => {});
       await rm(scratch, { recursive: true, force: true });
