@@ -103,10 +103,29 @@ protection must enable "Require branches to be up to date before merging". The v
 against `qa` when the checks run, so without it a second pull request with the same version could
 keep a stale green check after the first one is merged.
 
-## Project workflow
+## Project workflows
 
-Each project calls this repository's reusable workflow from `.github/workflows/publication.yml` on
-its `qa` branch:
+Each project calls two reusable workflows of this repository.
+
+On `main` (the app), `.github/workflows/ci.yml` runs lint, formatting and the tests on every push
+and pull request (`app.yml`). `bd build` keeps `.github/` out of the ticket branches, so players
+never get workflows:
+
+```yaml
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  app:
+    uses: bug-detective-project/catalog/.github/workflows/app.yml@v1.2.0
+```
+
+On `qa`, `.github/workflows/publication.yml` validates every pull request and tags the merge:
 
 ```yaml
 name: publication
