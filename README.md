@@ -49,8 +49,11 @@ listed project before the merge.
 
 Schemas and checks shared by the desktop app and `bd`: the catalog, the project manifest
 (`formatVersion`, currently 1; a newer one raises `UnsupportedFormatError`, which the app shows as
-"update Bug Detective"), the story, `review.json`, archive digests and the verification of a ticket
-package and its code against the manifest.
+"update Bug Detective"), the story, `review.json`, archive digests, the verification of a ticket
+package and its code against the manifest, and the archive path rules: besides `..`, absolute paths
+and drive letters, a file name Windows cannot store (`:`, `< > " | ? *`, reserved device names such
+as `CON` or `aux.ts`, a trailing dot or space) or two paths that differ only by case are refused,
+because players extract the packages on their disk.
 
 Depend on a tagged version, never on `main`:
 

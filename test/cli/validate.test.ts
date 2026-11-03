@@ -72,6 +72,15 @@ describe('bd validate', () => {
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(/manifest\.json/);
   });
 
+  it('refuses a ticket file Windows cannot store, naming it', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'gate2', 'aux.txt'), 'device name\n');
+    repo.git(repo.qaDir, 'add', '-A');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Add a reserved name');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /Unsafe path.*tickets\/front-1\/gate2\/aux\.txt/,
+    );
+  });
+
   it('refuses ticket files that are not tracked', async () => {
     await writeFile(join(repo.qaDir, 'tickets', 'front-2', 'gate1', 'extra.test.txt'), 'x\n');
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
