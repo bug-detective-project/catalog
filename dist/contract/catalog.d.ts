@@ -3,6 +3,8 @@
  * says where each project lives; names, descriptions and versions come from each project's qa branch.
  */
 import { z } from 'zod';
+/** Every project lives in the organization: the catalog never points outside it (no repojacking, no owner publishing on their own). */
+export declare const PROJECT_OWNER = "bug-detective-project";
 export declare const catalogProjectSchema: z.ZodObject<{
     id: z.ZodString;
     repository: z.ZodString;

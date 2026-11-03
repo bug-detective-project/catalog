@@ -22,14 +22,14 @@ long to reach players.
 }
 ```
 
-| Field           | Required           | Meaning                                                        |
-| --------------- | ------------------ | -------------------------------------------------------------- |
-| `id`            | yes                | Equal to `project.id` in the project's manifest                |
-| `repository`    | yes                | `owner/name` of the project's public repository                |
-| `qaRef`         | no (default `qa`)  | The branch or tag the content comes from                       |
-| `starter`       | exactly one `true` | The project a new game starts with; it cannot be hidden        |
-| `minAppVersion` | no                 | The oldest desktop version that can play the project (`X.Y.Z`) |
-| `hidden`        | no                 | Not offered to players who never played the project            |
+| Field           | Required           | Meaning                                                                                                                                                                                        |
+| --------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`            | yes                | Equal to `project.id` in the project's manifest                                                                                                                                                |
+| `repository`    | yes                | `bug-detective-project/<name>`: the project's public repository, always in the organization (a third-party project moves in before it is listed; see the desktop's `docs/adding-a-project.md`) |
+| `qaRef`         | no (default `qa`)  | The branch or tag the content comes from                                                                                                                                                       |
+| `starter`       | exactly one `true` | The project a new game starts with; it cannot be hidden                                                                                                                                        |
+| `minAppVersion` | no                 | The oldest desktop version that can play the project (`X.Y.Z`)                                                                                                                                 |
+| `hidden`        | no                 | Not offered to players who never played the project                                                                                                                                            |
 
 The order of the list is the order of the cards on the Projects screen. Names, descriptions,
 technologies, difficulty and ticket counts come from each project's `qa` branch. Versions are never
