@@ -45,6 +45,22 @@ describe('bd validate', () => {
     await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD' })).rejects.toThrow(/must be newer than 1\.0\.0/);
   });
 
+  it('accepts a missing tag while the commit is the ticket branch (tags are created on merge)', async () => {
+    repo.git(repo.qaDir, 'tag', '-d', 'back-1-v1.0.0');
+    expect((await validateLocal({ qaDir: repo.qaDir })).version).toBe('1.0.0');
+  });
+
+  it('refuses a ticket branch that moved after the publication, with or without its tag', async () => {
+    repo.git(repo.qaDir, 'tag', '-d', 'back-1-v1.0.0');
+    repo.git(repo.projectDir, 'checkout', '-q', 'back-1');
+    await writeFile(join(repo.projectDir, 'app.txt'), 'bug back-1, moved\n');
+    repo.git(repo.projectDir, 'commit', '-q', '--amend', '-am', 'Demo release back-1');
+    repo.git(repo.projectDir, 'checkout', '-q', 'main');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /back-1: manifest\.json does not match the ticket/,
+    );
+  });
+
   it('refuses a tag that points to another commit, naming the ticket', async () => {
     repo.git(repo.qaDir, 'tag', '-f', 'back-1-v1.0.0', 'main');
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(/back-1.*back-1-v1\.0\.0/);

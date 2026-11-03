@@ -74,7 +74,8 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
 | `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass                                                                            |
 | `bd validate [--base-ref origin/qa]`                            | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, and its version is newer than the one on the base ref                                                                       |
 | `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                    |
-| `bd publish --version X.Y.Z [--dry-run]`                        | Writes `manifest.json`, tags the ticket commits that have no tag yet, commits the manifest on the current work branch, pushes the ticket branches, the tags and the work branch, and prints the pull request link            |
+| `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                      |
+| `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                |
 | `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project (this repository's own check)                                                                                                                                                 |
 
 ## Publishing a project
@@ -82,11 +83,17 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
 1. In the project's `main` clone, change the app. In the `qa` folder, switch to a work branch
    (`git switch -c publish/2.5.0`) and change the tickets.
 2. `npx bd build`, commit the regenerated `gate1/` folders, then `npx bd verify`.
-3. `npx bd publish --version 2.5.0`. It never pushes `qa`.
+3. `npx bd publish --version 2.5.0`. It writes and commits `manifest.json` and pushes the ticket
+   branches and the work branch. It never pushes `qa` and creates no tags: nothing permanent exists
+   before the merge. If a push fails, fix the cause and run the same command again: it only redoes
+   the pushes. `npx bd publish --abort --version 2.5.0` undoes a publication that was committed but
+   not pushed yet (the "Publish" commit and the manifest); after a push, close the pull request and
+   publish the next version instead (a closed pull request leaves nothing behind).
 4. Open the pull request into `qa` (the link `bd publish` prints). The project's checks run
    `bd validate` and `bd verify`.
 5. Merge. The merge reaches players the next time they take a ticket, and the project's workflow
-   tags it as `qa-v2.5.0`.
+   tags the publication as `qa-v2.5.0` and each new ticket commit as `<id>-v2.5.0`. Tags are never
+   moved or deleted (a ruleset forbids it): the published history stays trustworthy.
 
 The `qa` branch is protected: it changes only through a pull request with green checks, and the
 protection must enable "Require branches to be up to date before merging". The version check runs

@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { buildTickets } from './build.js';
 import { checkCatalog } from './catalog-check.js';
 import { gitIn } from './git.js';
-import { publishProject } from './publish.js';
+import { abortPublication, publishProject } from './publish.js';
 import { validateRemote } from './remote.js';
 import { validateLocal } from './validate.js';
 import { formatTable, verifyTickets } from './verify.js';
@@ -15,7 +15,9 @@ const HELP = `Usage: bd <command> [options]   (inside a project's qa folder)
   bd validate [--base-ref origin/qa]     check the committed manifest, the ticket branches and tags
   bd validate --remote <owner/repo> [--ref qa] [--project <id>]
                                          check a project as players download it from GitHub
-  bd publish --version X.Y.Z [--dry-run] write the manifest, tag, commit and push (never qa)
+  bd publish --version X.Y.Z [--dry-run] write and commit the manifest, push the ticket branches and
+                                         the work branch (never qa; the merge tags the publication)
+  bd publish --abort --version X.Y.Z     undo a publication that was committed but not pushed
   bd catalog-check [--file projects.json]
                                          check the catalog and every listed project (catalog repository)
 `;
@@ -67,11 +69,19 @@ async function main(argv) {
         case 'publish': {
             const { values } = parseArgs({
                 args: rest,
-                options: { version: { type: 'string' }, 'dry-run': { type: 'boolean', default: false } },
+                options: {
+                    version: { type: 'string' },
+                    'dry-run': { type: 'boolean', default: false },
+                    abort: { type: 'boolean', default: false },
+                },
             });
             if (!values.version) {
                 console.error('bd publish needs --version X.Y.Z');
                 return 2;
+            }
+            if (values.abort) {
+                await abortPublication({ qaDir: await qaFolder(), version: values.version, log });
+                return 0;
             }
             await publishProject({ qaDir: await qaFolder(), version: values.version, dryRun: values['dry-run'], log });
             return 0;
