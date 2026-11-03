@@ -100,7 +100,24 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
     if (base !== undefined) {
         const published = base.version;
         if (typeof published === 'string' && compareVersions(manifest.version, published) <= 0) {
-            problems.push(`The version ${manifest.version} must be newer than ${published}, published on ${baseRef}`);
+            // Housekeeping on qa (README, workflows, CODEOWNERS, .npmrc) is not a publication: the same
+            // version is fine while the manifest and the tickets are exactly the published ones.
+            const sameManifest = JSON.stringify(base) === JSON.stringify(raw);
+            const ticketsDiff = await run('git', [
+                '-c',
+                'safe.directory=*',
+                '-C',
+                qaDir,
+                'diff',
+                '--quiet',
+                baseRef,
+                'HEAD',
+                '--',
+                'tickets',
+            ]);
+            if (!(sameManifest && ticketsDiff.code === 0)) {
+                problems.push(`The version ${manifest.version} must be newer than ${published}, published on ${baseRef}`);
+            }
         }
     }
     if (problems.length > 0) {

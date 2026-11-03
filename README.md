@@ -89,6 +89,9 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
    the pushes. `npx bd publish --abort --version 2.5.0` undoes a publication that was committed but
    not pushed yet (the "Publish" commit and the manifest); after a push, close the pull request and
    publish the next version instead (a closed pull request leaves nothing behind).
+   Housekeeping changes on `qa` (README, workflows, `CODEOWNERS`, `.npmrc`) need no new version:
+   `bd validate` accepts the same version while `manifest.json` and `tickets/` are exactly the
+   published ones, and the merge creates no new tag.
 4. Open the pull request into `qa` (the link `bd publish` prints). The project's checks run
    `bd validate` and `bd verify`.
 5. Merge. The merge reaches players the next time they take a ticket, and the project's workflow
