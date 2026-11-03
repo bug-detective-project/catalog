@@ -41,8 +41,26 @@ describe('bd validate', () => {
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(/front-2.*codeDigest/);
   });
 
-  it('refuses a version that is not newer than the base', async () => {
-    await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD' })).rejects.toThrow(/must be newer than 1\.0\.0/);
+  it('accepts the same version when neither the manifest nor the tickets changed (housekeeping on qa)', async () => {
+    await writeFile(join(repo.qaDir, 'README.md'), '# notes\n');
+    repo.git(repo.qaDir, 'add', 'README.md');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Add a README');
+    expect((await validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~1' })).version).toBe('1.0.0');
+  });
+
+  it('refuses a version that is not newer than the base when the tickets changed', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'hints.en.json'), '{"hints":["edited"]}\n');
+    repo.git(repo.qaDir, 'commit', '-q', '-am', 'Edit a hint');
+    await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~1' })).rejects.toThrow(/must be newer than 1\.0\.0/);
+  });
+
+  it('refuses a version that is not newer than the base when the manifest changed', async () => {
+    const file = join(repo.qaDir, 'manifest.json');
+    const manifest = JSON.parse(await readFile(file, 'utf8'));
+    manifest.createdAt = '2030-01-01T00:00:00.000Z';
+    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    repo.git(repo.qaDir, 'commit', '-q', '-am', 'Touch the manifest');
+    await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~1' })).rejects.toThrow(/must be newer than 1\.0\.0/);
   });
 
   it('accepts a missing tag while the commit is the ticket branch (tags are created on merge)', async () => {
