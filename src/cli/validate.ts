@@ -75,7 +75,28 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }: ValidateLo
     ]);
     const commit = tagged.stdout.toString('utf8').trim();
     if (tagged.code !== 0) {
-      problems.push(`${entry.id}: the tag ${entry.tag} does not exist`);
+      // Tags are created when the pull request is merged: before that, the commit must be the
+      // ticket branch (locally or on origin).
+      const onBranch = await run('git', [
+        '-c',
+        'safe.directory=*',
+        '-C',
+        qaDir,
+        'branch',
+        '-a',
+        '--contains',
+        entry.commit,
+      ]);
+      const branches = onBranch.stdout
+        .toString('utf8')
+        .split('\n')
+        .map((line) => line.replace(/^\*?\s*/, '').replace(/^remotes\/origin\//, ''))
+        .filter(Boolean);
+      if (onBranch.code !== 0 || !branches.includes(entry.branch)) {
+        problems.push(
+          `${entry.id}: the tag ${entry.tag} does not exist and ${entry.commit.slice(0, 12)} is not on the branch ${entry.branch}`,
+        );
+      }
     } else if (commit !== entry.commit) {
       problems.push(
         `${entry.id}: the tag ${entry.tag} points to ${commit.slice(0, 12)}, not to the manifest's ${entry.commit.slice(0, 12)}`,

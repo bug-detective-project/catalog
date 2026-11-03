@@ -40,12 +40,32 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Tag the publication
+        with:
+          fetch-depth: 0
+      - name: Fetch the ticket branches
+        run: git fetch --quiet origin '+refs/heads/*:refs/remotes/origin/*' --tags
+      - name: Tag the ticket commits and the publication
+        # bd publish creates no tags: they are created here, on the merge, so nothing permanent
+        # exists before it. Existing tags are never moved (the tag ruleset forbids it anyway).
         run: |
           version=$(node -p "require('./manifest.json').version")
+          tags=()
           if git ls-remote --exit-code --tags origin "refs/tags/qa-v$version" >/dev/null; then
             echo "qa-v$version already exists"
           else
             git tag "qa-v$version"
-            git push origin "qa-v$version"
+            tags+=("qa-v$version")
+          fi
+          for pair in $(node -p "require('./manifest.json').entries.map((e) => e.tag + '=' + e.commit).join(' ')"); do
+            tag=${pair%%=*}
+            commit=${pair##*=}
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+              echo "$tag already exists"
+            else
+              git tag "$tag" "$commit"
+              tags+=("$tag")
+            fi
+          done
+          if [ ${#tags[@]} -gt 0 ]; then
+            git push origin "${tags[@]}"
           fi
