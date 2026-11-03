@@ -1,5 +1,5 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -45,6 +45,22 @@ describe('bd build', () => {
     expect(repo.git(repo.qaDir, 'show', 'front-2:TICKET.pt.md')).toBe('# front-2 (pt)');
     expect(repo.git(repo.qaDir, 'show', 'front-2:front-1.test.txt')).toBe('regression front-1');
     expect(repo.git(repo.qaDir, 'ls-tree', '--name-only', 'front-2').split('\n')).not.toContain('front-2.test.txt');
+  });
+
+  it("keeps main's .github/ (the app's CI) out of the ticket branches", async () => {
+    await mkdir(join(repo.projectDir, '.github', 'workflows'), { recursive: true });
+    await writeFile(join(repo.projectDir, '.github', 'workflows', 'ci.yml'), 'name: ci\n');
+    repo.git(repo.projectDir, 'add', '-A');
+    repo.git(repo.projectDir, 'commit', '-q', '-m', 'Add the CI');
+
+    await buildTickets({ qaDir: repo.qaDir, log: () => {} });
+
+    for (const id of ids) {
+      const files = repo.git(repo.qaDir, 'ls-tree', '-r', '--name-only', id).split('\n');
+      expect(files.some((file) => file.startsWith('.github/'))).toBe(false);
+      expect(files).toContain('app.txt');
+    }
+    expect(repo.git(repo.projectDir, 'ls-tree', '-r', '--name-only', 'main')).toContain('.github/workflows/ci.yml');
   });
 
   it('fails on a bug.patch that no longer applies, naming the ticket and leaving nothing behind', async () => {

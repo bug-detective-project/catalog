@@ -1,0 +1,28 @@
+name: app
+
+# Reusable workflow for a project's main branch (the app with every bug fixed): lint, formatting
+# and the tests, on every push and pull request. Each project calls it from its own
+# .github/workflows/ci.yml on main (see the README); bd build keeps .github/ out of the ticket
+# branches, so players never get workflows.
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        type: string
+        default: 26.12.1
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test

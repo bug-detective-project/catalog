@@ -78,6 +78,8 @@ async function buildBranch(qaDir, base, id, project) {
         for (const file of await testFilesOf(worktree)) {
             await rm(file);
         }
+        // The app's CI lives on main only (the catalog's app.yml): players never get workflows.
+        await rm(join(worktree, '.github'), { recursive: true, force: true });
         await cp(join(ticket, 'gate1'), worktree, { recursive: true });
         await cp(join(ticket, 'ticket.en.md'), join(worktree, 'TICKET.en.md'));
         await cp(join(ticket, 'ticket.pt.md'), join(worktree, 'TICKET.pt.md'));
