@@ -12,7 +12,9 @@ const HELP = `Usage: bd <command> [options]   (inside a project's qa folder)
 
   bd build [--base main]                 regenerate every gate1/ and rebuild the ticket branches
   bd verify [ticket ids...]              buggy: Gate 1 passes, Gate 2 fails; fixed: both pass
-  bd validate [--base-ref origin/qa]     check the committed manifest, the ticket branches and tags
+  bd validate [--base-ref origin/qa] [--offline]
+                                         check the committed manifest, the ticket branches, the tags, the
+                                         project policy and the dependencies (--offline skips release ages)
   bd validate --remote <owner/repo> [--ref qa] [--project <id>]
                                          check a project as players download it from GitHub
   bd publish --version X.Y.Z [--dry-run] write and commit the manifest, push the ticket branches and
@@ -58,11 +60,12 @@ async function main(argv) {
                     ref: { type: 'string', default: 'qa' },
                     project: { type: 'string' },
                     'base-ref': { type: 'string', default: 'origin/qa' },
+                    offline: { type: 'boolean', default: false },
                 },
             });
             const manifest = values.remote
                 ? await validateRemote({ repository: values.remote, ref: values.ref, project: values.project })
-                : await validateLocal({ qaDir: await qaFolder(), baseRef: values['base-ref'] });
+                : await validateLocal({ qaDir: await qaFolder(), baseRef: values['base-ref'], offline: values.offline, log });
             log(`${manifest.project.name} ${manifest.version}: ${manifest.tickets.front} front + ${manifest.tickets.back} back tickets, valid`);
             return 0;
         }

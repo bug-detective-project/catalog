@@ -1,9 +1,14 @@
 import type { TextFile } from '../contract/policy.ts';
 import type { ProjectManifest } from '../contract/manifest.ts';
+import type { FetchJson } from './dependencies.ts';
 export interface ValidateLocalOptions {
     qaDir: string;
     /** Where the published manifest is: the base branch of the pull request. */
     baseRef?: string;
+    /** Skip the checks that need the network (the release ages of the dependencies). */
+    offline?: boolean;
+    fetchJson?: FetchJson;
+    log?: (line: string) => void;
 }
 /**
  * The project workflow must call this repository's project.yml pinned by commit hash, with the
@@ -20,4 +25,14 @@ export declare function vscodeFilesOf(qaDir: string, branches: readonly string[]
 }[]>;
 /** The policy checks of a publication: VS Code files and extensions, and dangerous commands in the texts. */
 export declare function policyProblems(qaDir: string, branches: readonly string[]): Promise<string[]>;
-export declare function validateLocal({ qaDir, baseRef }: ValidateLocalOptions): Promise<ProjectManifest>;
+/**
+ * The dependency checks of main and of every ticket branch: origins and integrity, allowed
+ * install scripts, the .npmrc, and (with the network) the release ages. A branch without a
+ * lockfile has no dependencies and nothing to check.
+ */
+export declare function dependencyProblems(qaDir: string, branches: readonly string[], options?: {
+    offline?: boolean;
+    fetchJson?: FetchJson;
+    log?: (line: string) => void;
+}): Promise<string[]>;
+export declare function validateLocal({ qaDir, baseRef, offline, fetchJson, log, }: ValidateLocalOptions): Promise<ProjectManifest>;

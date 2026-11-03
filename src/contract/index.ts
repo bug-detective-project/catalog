@@ -1,5 +1,6 @@
 export * from './archive.ts';
 export * from './catalog.ts';
+export * from './dependencies.ts';
 export * from './manifest.ts';
 export * from './policy.ts';
 export * from './project-files.ts';

@@ -6,6 +6,7 @@
 import { compareVersions, parseManifest } from '../contract/manifest.js';
 import { textProblems, vscodeProblems } from '../contract/policy.js';
 import { buildManifest, readQaFiles } from './manifest.js';
+import { fetchJsonWithTimeout, installScriptProblems, lockfileOriginProblems, npmrcProblems, releaseAgeProblems, } from './dependencies.js';
 import { gitArchive, gitIn, resolveBranchRef } from './git.js';
 import { run } from './process.js';
 /** The manifest.json committed at a ref, or undefined when the ref or the file does not exist. */
@@ -114,7 +115,44 @@ export async function policyProblems(qaDir, branches) {
     }
     return [...problems, ...textProblems(await projectTexts(qaDir))];
 }
-export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
+/**
+ * The dependency checks of main and of every ticket branch: origins and integrity, allowed
+ * install scripts, the .npmrc, and (with the network) the release ages. A branch without a
+ * lockfile has no dependencies and nothing to check.
+ */
+export async function dependencyProblems(qaDir, branches, options = {}) {
+    const problems = [];
+    const log = options.log ?? (() => { });
+    for (const branch of ['main', ...branches]) {
+        const ref = await resolveBranchRef(qaDir, branch).catch(() => null);
+        if (!ref)
+            continue;
+        const lockText = await fileAt(qaDir, ref, 'package-lock.json');
+        if (lockText === undefined)
+            continue;
+        let lock;
+        let packageJson;
+        try {
+            lock = JSON.parse(lockText);
+            packageJson = JSON.parse((await fileAt(qaDir, ref, 'package.json')) ?? '{}');
+        }
+        catch (error) {
+            problems.push(`${branch}: package.json or package-lock.json is not valid JSON (${error.message})`);
+            continue;
+        }
+        const found = [
+            ...lockfileOriginProblems(lock),
+            ...installScriptProblems(lock, packageJson),
+            ...npmrcProblems(await fileAt(qaDir, ref, '.npmrc')),
+            ...(options.offline
+                ? []
+                : await releaseAgeProblems(lock, options.fetchJson ?? fetchJsonWithTimeout, new Date(), log)),
+        ];
+        problems.push(...found.map((problem) => `${branch}: ${problem}`));
+    }
+    return problems;
+}
+export async function validateLocal({ qaDir, baseRef = 'origin/qa', offline = false, fetchJson, log, }) {
     const git = gitIn(qaDir);
     const problems = [];
     const dirty = await git.text('status', '--porcelain', '--', 'tickets');
@@ -144,7 +182,7 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
     catch (error) {
         problems.push(error.message);
     }
-    problems.push(...(await policyProblems(qaDir, manifest.entries.map((entry) => entry.branch))));
+    problems.push(...(await policyProblems(qaDir, manifest.entries.map((entry) => entry.branch))), ...(await dependencyProblems(qaDir, manifest.entries.map((entry) => entry.branch), { offline, fetchJson, log })));
     for (const entry of manifest.entries) {
         const tagged = await run('git', [
             '-c',
