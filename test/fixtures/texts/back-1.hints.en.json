@@ -1,0 +1,7 @@
+{
+  "hints": [
+    "Reproduce it without the UI: call GET /api/tickets?search=%25 with curl or the browser. If the API already returns every ticket, the client is not the problem.",
+    "In SQL, LIKE gives % and _ a meaning of their own: % matches any sequence and _ any single character. A user's text inside a LIKE pattern needs those characters escaped, and the query has to say which escape character it uses.",
+    "Read listTickets in server/src/repository.ts. Look at how it builds the pattern: the user's text goes in unescaped, and the query has no ESCAPE clause."
+  ]
+}

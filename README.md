@@ -52,6 +52,15 @@ Schemas and checks shared by the desktop app and `bd`: the catalog, the project 
 "update Bug Detective"), the story, `review.json`, archive digests and the verification of a ticket
 package and its code against the manifest.
 
+It also holds the project policy (`policy.ts`), applied by `bd validate` to every publication:
+the VS Code extensions a project may recommend (`ALLOWED_VSCODE_EXTENSIONS`: ESLint, Prettier and
+Vitest for now; UI extensions run on the player's PC, outside the workspace), the files allowed in
+`.vscode/` (`settings.json`, `extensions.json`, `launch.json`), checked on `main` and on every
+ticket branch, and the commands a ticket, hint, solution, review or story text must never ask the
+player to run (`DANGEROUS_TEXT_PATTERNS`: downloads piped into a shell, PowerShell, `cmd /c`,
+downloads from outside `localhost`, global installs). Commands against the project's own app are
+fine. Changing a list is a pull request to this repository.
+
 Depend on a tagged version, never on `main`:
 
 ```json
