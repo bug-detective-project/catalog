@@ -5,11 +5,13 @@
 import { z } from 'zod';
 import { compareVersions } from './manifest.js';
 const VERSION = /^\d+\.\d+\.\d+$/;
+/** Every project lives in the organization: the catalog never points outside it (no repojacking, no owner publishing on their own). */
+export const PROJECT_OWNER = 'bug-detective-project';
 export const catalogProjectSchema = z.object({
     /** Must match project.id in the manifest of the project's qa branch. */
     id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/, 'ids are lowercase, like supportdesk'),
-    /** "owner/name" of the project's public GitHub repository. */
-    repository: z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/, 'use owner/name'),
+    /** "bug-detective-project/<name>": the project's public repository, always in the organization. */
+    repository: z.string().regex(new RegExp(`^${PROJECT_OWNER}/[A-Za-z0-9_.-]{1,100}$`), `use ${PROJECT_OWNER}/<name>`),
     /** The branch or tag the content comes from. */
     qaRef: z.string().min(1).max(100).default('qa'),
     /** The project a new game starts with; exactly one. */
