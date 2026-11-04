@@ -2,7 +2,7 @@
  * Checks of downloaded or local content against the project manifest. Nothing reaches a player
  * before these pass.
  */
-import { treeDigest } from './archive.ts';
+import { assertNoCaseCollisions, treeDigest } from './archive.ts';
 import type { ArchiveFile } from './archive.ts';
 import { ContentVerificationError, PACKAGE_EXCLUDED } from './manifest.ts';
 import type { ProjectManifest, Track, TicketEntry } from './manifest.ts';
@@ -47,6 +47,7 @@ export function packageOf(entry: TicketEntry, qaFiles: readonly ArchiveFile[]): 
 
 /** Checks a ticket package against its manifest entry. */
 export function verifyPackage(entry: TicketEntry, packageFiles: ArchiveFile[]): ArchiveFile[] {
+  assertNoCaseCollisions(packageFiles);
   if (packageFiles.length !== entry.package.files || treeDigest(packageFiles) !== entry.package.digest) {
     throw new ContentVerificationError(`Ticket ${entry.id}: the package does not match the manifest`);
   }
@@ -55,6 +56,7 @@ export function verifyPackage(entry: TicketEntry, packageFiles: ArchiveFile[]): 
 
 /** Checks a ticket's code against its manifest entry. */
 export function verifyCode(entry: TicketEntry, codeFiles: ArchiveFile[]): ArchiveFile[] {
+  assertNoCaseCollisions(codeFiles);
   if (codeFiles.length !== entry.codeFiles || treeDigest(codeFiles) !== entry.codeDigest) {
     throw new ContentVerificationError(`Ticket ${entry.id}: the ticket code does not match the manifest`);
   }

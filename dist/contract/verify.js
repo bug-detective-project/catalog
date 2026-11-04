@@ -2,7 +2,7 @@
  * Checks of downloaded or local content against the project manifest. Nothing reaches a player
  * before these pass.
  */
-import { treeDigest } from './archive.js';
+import { assertNoCaseCollisions, treeDigest } from './archive.js';
 import { ContentVerificationError, PACKAGE_EXCLUDED } from './manifest.js';
 /** The publication is not usable (a ticket commit or tag is missing, or it is older than allowed). */
 export class IncompletePublicationError extends ContentVerificationError {
@@ -36,6 +36,7 @@ export function packageOf(entry, qaFiles) {
 }
 /** Checks a ticket package against its manifest entry. */
 export function verifyPackage(entry, packageFiles) {
+    assertNoCaseCollisions(packageFiles);
     if (packageFiles.length !== entry.package.files || treeDigest(packageFiles) !== entry.package.digest) {
         throw new ContentVerificationError(`Ticket ${entry.id}: the package does not match the manifest`);
     }
@@ -43,6 +44,7 @@ export function verifyPackage(entry, packageFiles) {
 }
 /** Checks a ticket's code against its manifest entry. */
 export function verifyCode(entry, codeFiles) {
+    assertNoCaseCollisions(codeFiles);
     if (codeFiles.length !== entry.codeFiles || treeDigest(codeFiles) !== entry.codeDigest) {
         throw new ContentVerificationError(`Ticket ${entry.id}: the ticket code does not match the manifest`);
     }
