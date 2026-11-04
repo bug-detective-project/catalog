@@ -1,6 +1,7 @@
 import type { TextFile } from '../contract/policy.ts';
 import type { ProjectManifest } from '../contract/manifest.ts';
 import type { FetchJson } from './dependencies.ts';
+type Log = (line: string) => void;
 export interface ValidateLocalOptions {
     qaDir: string;
     /** Where the published manifest is: the base branch of the pull request. */
@@ -15,7 +16,7 @@ export interface ValidateLocalOptions {
  * version in a comment that matches the @bug-detective/catalog dependency of the qa branch: the
  * checks and the CLI then come from the same version.
  */
-export declare function workflowReferenceProblems(qaDir: string, ref?: string): Promise<string[]>;
+export declare function workflowReferenceProblems(qaDir: string, ref?: string, log?: Log): Promise<string[]>;
 /** The player-facing texts of the committed qa folder: markdown as is, JSON as its strings. */
 export declare function projectTexts(qaDir: string): Promise<TextFile[]>;
 /** The .vscode/ files of main and of every ticket branch, per branch. */
@@ -24,7 +25,7 @@ export declare function vscodeFilesOf(qaDir: string, branches: readonly string[]
     files: TextFile[];
 }[]>;
 /** The policy checks of a publication: VS Code files and extensions, and dangerous commands in the texts. */
-export declare function policyProblems(qaDir: string, branches: readonly string[]): Promise<string[]>;
+export declare function policyProblems(qaDir: string, branches: readonly string[], log?: Log): Promise<string[]>;
 /**
  * The dependency checks of main and of every ticket branch: origins and integrity, allowed
  * install scripts, the .npmrc, and (with the network) the release ages. A branch without a
@@ -36,3 +37,4 @@ export declare function dependencyProblems(qaDir: string, branches: readonly str
     log?: (line: string) => void;
 }): Promise<string[]>;
 export declare function validateLocal({ qaDir, baseRef, offline, fetchJson, log, }: ValidateLocalOptions): Promise<ProjectManifest>;
+export {};

@@ -11,6 +11,7 @@ import { buildManifest, readQaFiles } from './manifest.ts';
 import {
   fetchJsonWithTimeout,
   installScriptProblems,
+  installedPackages,
   lockfileOriginProblems,
   npmrcProblems,
   releaseAgeProblems,
@@ -18,6 +19,11 @@ import {
 import type { FetchJson, Lockfile, PackageJson } from './dependencies.ts';
 import { gitArchive, gitIn, resolveBranchRef } from './git.ts';
 import { run } from './process.ts';
+
+type Log = (line: string) => void;
+const quiet: Log = () => {};
+const ok = (log: Log, line: string) => log(`ok   ${line}`);
+const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`;
 
 export interface ValidateLocalOptions {
   qaDir: string;
@@ -56,9 +62,10 @@ const WORKFLOW_USES =
  * version in a comment that matches the @bug-detective/catalog dependency of the qa branch: the
  * checks and the CLI then come from the same version.
  */
-export async function workflowReferenceProblems(qaDir: string, ref = 'HEAD'): Promise<string[]> {
+export async function workflowReferenceProblems(qaDir: string, ref = 'HEAD', log: Log = quiet): Promise<string[]> {
   const workflow = await fileAt(qaDir, ref, '.github/workflows/publication.yml');
   if (workflow === undefined) {
+    ok(log, '.github/workflows/publication.yml: not present, nothing to check');
     return [];
   }
   const match = WORKFLOW_USES.exec(workflow);
@@ -90,6 +97,12 @@ export async function workflowReferenceProblems(qaDir: string, ref = 'HEAD'): Pr
   } else if (dependency && comment !== dependency) {
     problems.push(
       `.github/workflows/publication.yml calls project.yml ${comment}, but package.json depends on @bug-detective/catalog ${dependency}: use the same version in both`,
+    );
+  }
+  if (problems.length === 0) {
+    ok(
+      log,
+      `.github/workflows/publication.yml: project.yml@${pinned.slice(0, 12)} ${comment}, ${dependency ? 'equal to the @bug-detective/catalog dependency' : 'and package.json has no tagged @bug-detective/catalog dependency to compare'}`,
     );
   }
   return problems;
@@ -145,12 +158,25 @@ export async function vscodeFilesOf(
 }
 
 /** The policy checks of a publication: VS Code files and extensions, and dangerous commands in the texts. */
-export async function policyProblems(qaDir: string, branches: readonly string[]): Promise<string[]> {
+export async function policyProblems(qaDir: string, branches: readonly string[], log: Log = quiet): Promise<string[]> {
   const problems: string[] = [];
+  let vscodeFiles = 0;
   for (const { branch, files } of await vscodeFilesOf(qaDir, branches)) {
+    vscodeFiles += files.length;
     problems.push(...vscodeProblems(files).map((problem) => `${branch}: ${problem}`));
   }
-  return [...problems, ...textProblems(await projectTexts(qaDir))];
+  if (problems.length === 0) {
+    ok(
+      log,
+      `.vscode/: ${plural(vscodeFiles, 'file')} across main and ${plural(branches.length, 'ticket branch', 'ticket branches')}, only allowed files and extensions`,
+    );
+  }
+  const texts = await projectTexts(qaDir);
+  const dangerous = textProblems(texts);
+  if (dangerous.length === 0) {
+    ok(log, `texts: ${plural(texts.length, 'file')} (tickets, hints, story), no command to run on the PC`);
+  }
+  return [...problems, ...dangerous];
 }
 
 /**
@@ -169,7 +195,10 @@ export async function dependencyProblems(
     const ref = await resolveBranchRef(qaDir, branch).catch(() => null);
     if (!ref) continue;
     const lockText = await fileAt(qaDir, ref, 'package-lock.json');
-    if (lockText === undefined) continue;
+    if (lockText === undefined) {
+      ok(log, `${branch}: no package-lock.json, no dependencies to check`);
+      continue;
+    }
     let lock: Lockfile;
     let packageJson: PackageJson;
     try {
@@ -188,6 +217,14 @@ export async function dependencyProblems(
         : await releaseAgeProblems(lock, options.fetchJson ?? fetchJsonWithTimeout, new Date(), log)),
     ];
     problems.push(...found.map((problem) => `${branch}: ${problem}`));
+    if (found.length === 0) {
+      const installed = installedPackages(lock);
+      const allowed = Object.keys(packageJson.allowScripts ?? {});
+      ok(
+        log,
+        `${branch}: ${plural(installed.length, 'package')} from the registry with integrity, install scripts ${allowed.length > 0 ? `only for ${allowed.join(', ')}` : 'for none'}, .npmrc with the rules, release ages ${options.offline ? 'skipped (--offline)' : 'of at least 7 days'}`,
+      );
+    }
   }
   return problems;
 }
@@ -201,12 +238,25 @@ export async function validateLocal({
 }: ValidateLocalOptions): Promise<ProjectManifest> {
   const git = gitIn(qaDir);
   const problems: string[] = [];
+  const say = log ?? quiet;
+  /** One line per check: ok with what was checked, or FAIL with how many problems the error will list. */
+  const report = (before: number, passed: string | null, label: string) => {
+    const count = problems.length - before;
+    if (count > 0) {
+      say(`FAIL ${label}: ${plural(count, 'problem')}`);
+    } else if (passed !== null) {
+      ok(say, passed);
+    }
+  };
 
   const dirty = await git.text('status', '--porcelain', '--', 'tickets');
   if (dirty) {
     problems.push(`These ticket files are not committed (players only get committed files):\n${dirty}`);
   }
-  problems.push(...(await workflowReferenceProblems(qaDir)));
+  report(0, 'tickets/: every file committed', 'tickets/ (uncommitted files)');
+  let before = problems.length;
+  problems.push(...(await workflowReferenceProblems(qaDir, 'HEAD', say)));
+  report(before, null, '.github/workflows/publication.yml');
 
   const raw = await manifestAt(qaDir, 'HEAD');
   if (raw === undefined) {
@@ -214,6 +264,7 @@ export async function validateLocal({
   }
   const manifest = parseManifest(raw);
 
+  before = problems.length;
   try {
     const rebuilt = await buildManifest({ qaDir, version: manifest.version, now: manifest.createdAt });
     if (
@@ -232,19 +283,22 @@ export async function validateLocal({
   } catch (error) {
     problems.push((error as Error).message);
   }
-
-  problems.push(
-    ...(await policyProblems(
-      qaDir,
-      manifest.entries.map((entry) => entry.branch),
-    )),
-    ...(await dependencyProblems(
-      qaDir,
-      manifest.entries.map((entry) => entry.branch),
-      { offline, fetchJson, log },
-    )),
+  report(
+    before,
+    `manifest.json: ${manifest.project.name} ${manifest.version}, ${manifest.tickets.front} front + ${manifest.tickets.back} back tickets, every entry matches tickets/ and the branches`,
+    'manifest.json',
   );
 
+  const branches = manifest.entries.map((entry) => entry.branch);
+  before = problems.length;
+  problems.push(...(await policyProblems(qaDir, branches, say)));
+  report(before, null, 'policy (.vscode/ and texts)');
+  before = problems.length;
+  problems.push(...(await dependencyProblems(qaDir, branches, { offline, fetchJson, log: say })));
+  report(before, null, 'dependencies');
+
+  before = problems.length;
+  let taggedCount = 0;
   for (const entry of manifest.entries) {
     const tagged = await run('git', [
       '-c',
@@ -270,12 +324,12 @@ export async function validateLocal({
         '--contains',
         entry.commit,
       ]);
-      const branches = onBranch.stdout
+      const containing = onBranch.stdout
         .toString('utf8')
         .split('\n')
         .map((line) => line.replace(/^\*?\s*/, '').replace(/^remotes\/origin\//, ''))
         .filter(Boolean);
-      if (onBranch.code !== 0 || !branches.includes(entry.branch)) {
+      if (onBranch.code !== 0 || !containing.includes(entry.branch)) {
         problems.push(
           `${entry.id}: the tag ${entry.tag} does not exist and ${entry.commit.slice(0, 12)} is not on the branch ${entry.branch}`,
         );
@@ -284,8 +338,15 @@ export async function validateLocal({
       problems.push(
         `${entry.id}: the tag ${entry.tag} points to ${commit.slice(0, 12)}, not to the manifest's ${entry.commit.slice(0, 12)}`,
       );
+    } else {
+      taggedCount += 1;
     }
   }
+  report(
+    before,
+    `tags: ${plural(taggedCount, 'ticket tag')} pointing to the manifest's commits, ${plural(manifest.entries.length - taggedCount, 'commit')} still on the branches only (tags are created on merge)`,
+    'tags and ticket commits',
+  );
 
   const baseExists = await run('git', [
     '-c',
@@ -301,9 +362,15 @@ export async function validateLocal({
     throw new Error(`The base ref ${baseRef} does not exist: fetch it ("git fetch origin") or pass --base-ref`);
   }
   const base = await manifestAt(qaDir, baseRef);
+  before = problems.length;
+  let versionLine = `version: ${manifest.version}, nothing published on ${baseRef} yet`;
   if (base !== undefined) {
     const published = (base as { version?: unknown }).version;
+    if (typeof published === 'string' && compareVersions(manifest.version, published) > 0) {
+      versionLine = `version: ${manifest.version} is newer than ${published}, published on ${baseRef}`;
+    }
     if (typeof published === 'string' && compareVersions(manifest.version, published) <= 0) {
+      versionLine = `version: ${manifest.version} equals ${baseRef}: the manifest and the tickets did not change (housekeeping)`;
       // Housekeeping on qa (README, workflows, CODEOWNERS, .npmrc) is not a publication: the same
       // version is fine while the manifest and the tickets are exactly the published ones.
       const sameManifest = JSON.stringify(base) === JSON.stringify(raw);
@@ -324,6 +391,7 @@ export async function validateLocal({
       }
     }
   }
+  report(before, versionLine, 'version');
 
   if (problems.length > 0) {
     throw new Error(problems.join('\n'));
