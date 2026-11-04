@@ -75,6 +75,24 @@ build git dependencies by default. To release a version: `npm run check`, `npm r
 `dist/`, then tag `vX.Y.Z` and push the tag. The `ci` check fails when `dist/` does not match the
 sources.
 
+## Dependency rules
+
+Every project with dependencies (a `package-lock.json` on `main` or on a ticket branch) follows
+these rules, applied by `bd validate` (the contract's `dependencies.ts`; a list changes only through a
+pull request to this repository):
+
+- every package comes from `https://registry.npmjs.org/` and has an integrity hash (no git or URL
+  dependencies);
+- `package.json` may allow install scripts (npm's `allowScripts`) only for the packages of
+  `ALLOWED_INSTALL_SCRIPTS` (`better-sqlite3` today); other packages with scripts are fine, npm
+  does not run them;
+- every version has been on the registry for at least 7 days (`min-release-age`), read from the
+  registry's `time` field; `--offline` skips this check;
+- `.npmrc` on `main` and on every ticket branch sets `allow-git=none`, `allow-remote=none` and
+  `min-release-age=7`, so the same rules protect the author's own `npm install`.
+
+`npm audit` is not part of `bd validate`: it runs as a non-blocking step of the project's `main` CI.
+
 ## `bd`
 
 Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clone of `main`). The
@@ -84,7 +102,7 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `bd build [--base main]`                                        | Regenerates every `tickets/<id>/gate1/` (the tests of `main` plus the regression test of every other ticket) and rebuilds each ticket branch as one commit: `main`, the ticket's `bug.patch`, its `gate1/` and its Jira card |
 | `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass                                                                            |
-| `bd validate [--base-ref origin/qa]`                            | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, and its version is newer than the one on the base ref                                                                       |
+| `bd validate [--base-ref origin/qa] [--offline]`                | The committed `manifest.json` matches the committed tickets, the ticket branches and the tags; the project workflow reference; the dependency rules below (`--offline` skips the release ages)                               |
 | `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                    |
 | `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                      |
 | `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                |

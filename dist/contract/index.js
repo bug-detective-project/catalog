@@ -1,5 +1,6 @@
 export * from './archive.js';
 export * from './catalog.js';
+export * from './dependencies.js';
 export * from './manifest.js';
 export * from './policy.js';
 export * from './project-files.js';

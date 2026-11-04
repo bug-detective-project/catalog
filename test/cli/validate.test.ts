@@ -218,3 +218,59 @@ describe('bd validate, the project policy', () => {
     expect((await validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~2' })).version).toBe('1.1.0');
   });
 });
+
+describe('bd validate, the dependencies', () => {
+  const registry = 'https://registry.npmjs.org/';
+  async function commitOnMain(files: Record<string, string>) {
+    for (const [path, text] of Object.entries(files)) {
+      await writeFile(join(repo.projectDir, path), text);
+    }
+    repo.git(repo.projectDir, 'add', '-A');
+    repo.git(repo.projectDir, 'commit', '-q', '-m', 'Dependencies');
+  }
+  const lockfile = (resolved: string) =>
+    `${JSON.stringify({ lockfileVersion: 3, packages: { '': { name: 'demo' }, 'node_modules/left-pad': { version: '1.3.0', resolved, integrity: 'sha512-x' } } }, null, 2)}\n`;
+  const npmrc = 'allow-git=none\nallow-remote=none\nmin-release-age=7\n';
+  const old = async () => ({ time: { '1.3.0': '2018-01-01T00:00:00Z' } });
+
+  it('accepts a lockfile from the registry with the .npmrc, and skips the release ages offline', async () => {
+    await commitOnMain({ 'package-lock.json': lockfile(`${registry}left-pad/-/left-pad-1.3.0.tgz`), '.npmrc': npmrc });
+    expect((await validateLocal({ qaDir: repo.qaDir, offline: true })).version).toBe('1.0.0');
+    expect((await validateLocal({ qaDir: repo.qaDir, fetchJson: old })).version).toBe('1.0.0');
+  });
+
+  it('refuses a dependency from git, naming the branch and the package', async () => {
+    await commitOnMain({ 'package-lock.json': lockfile('git+https://github.com/x/left-pad.git#abc'), '.npmrc': npmrc });
+    await expect(validateLocal({ qaDir: repo.qaDir, offline: true })).rejects.toThrow(
+      /main: left-pad comes from git\+https/,
+    );
+  });
+
+  it('refuses a project with dependencies but without the .npmrc', async () => {
+    await commitOnMain({ 'package-lock.json': lockfile(`${registry}left-pad/-/left-pad-1.3.0.tgz`) });
+    await expect(validateLocal({ qaDir: repo.qaDir, offline: true })).rejects.toThrow(/main: \.npmrc is missing/);
+  });
+
+  it('refuses a version published less than 7 days ago, unless offline', async () => {
+    await commitOnMain({ 'package-lock.json': lockfile(`${registry}left-pad/-/left-pad-1.3.0.tgz`), '.npmrc': npmrc });
+    const fresh = async () => ({ time: { '1.3.0': new Date().toISOString() } });
+    await expect(validateLocal({ qaDir: repo.qaDir, fetchJson: fresh })).rejects.toThrow(
+      /main: left-pad@1\.3\.0 was published on .* less than 7 days ago/,
+    );
+    expect((await validateLocal({ qaDir: repo.qaDir, offline: true })).version).toBe('1.0.0');
+  });
+
+  it('checks the ticket branches too', async () => {
+    repo.git(repo.projectDir, 'checkout', '-q', 'front-2');
+    await commitOnMain({
+      'package-lock.json': lockfile('https://npm.example.com/left-pad/-/left-pad-1.3.0.tgz'),
+      '.npmrc': npmrc,
+    });
+    repo.git(repo.projectDir, 'checkout', '-q', 'main');
+    // The ticket branch moved: republish so the manifest matches, then the dependency rule speaks.
+    await publishLocally(repo, '1.1.0');
+    await expect(validateLocal({ qaDir: repo.qaDir, offline: true, baseRef: 'HEAD~1' })).rejects.toThrow(
+      /front-2: left-pad comes from https:\/\/npm\.example\.com/,
+    );
+  });
+});
