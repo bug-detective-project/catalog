@@ -25,6 +25,36 @@ describe('bd validate', () => {
     expect((await validateLocal({ qaDir: repo.qaDir })).version).toBe('1.0.0');
   });
 
+  it('reports every check it runs, one line each', async () => {
+    const lines: string[] = [];
+    await validateLocal({ qaDir: repo.qaDir, log: (line) => lines.push(line) });
+    expect(lines).toEqual([
+      'ok   tickets/: every file committed',
+      'ok   .github/workflows/publication.yml: not present, nothing to check',
+      expect.stringMatching(/^ok {3}manifest\.json: .* 1\.0\.0, 2 front \+ 1 back tickets, every entry matches/),
+      'ok   .vscode/: 0 files across main and 3 ticket branches, only allowed files and extensions',
+      expect.stringMatching(/^ok {3}texts: \d+ files \(tickets, hints, story\), no command to run on the PC$/),
+      'ok   main: no package-lock.json, no dependencies to check',
+      'ok   front-1: no package-lock.json, no dependencies to check',
+      'ok   front-2: no package-lock.json, no dependencies to check',
+      'ok   back-1: no package-lock.json, no dependencies to check',
+      expect.stringMatching(
+        /^ok {3}tags: \d+ ticket tags? pointing to the manifest's commits, \d+ commits? still on the branches only/,
+      ),
+      expect.stringMatching(/^ok {3}version: 1\.0\.0/),
+    ]);
+  });
+
+  it('reports a failing check as FAIL with its problem count, and still names the problems', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'ticket.en.md'), '# front-1, edited\n');
+    const lines: string[] = [];
+    await expect(validateLocal({ qaDir: repo.qaDir, log: (line) => lines.push(line) })).rejects.toThrow(
+      /not committed/,
+    );
+    expect(lines[0]).toBe('FAIL tickets/ (uncommitted files): 1 problem');
+    expect(lines.filter((line) => line.startsWith('FAIL'))).toHaveLength(1);
+  });
+
   it('refuses ticket files that are not committed, naming them', async () => {
     await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'ticket.en.md'), '# front-1, edited\n');
     await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
