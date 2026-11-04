@@ -17,7 +17,15 @@ export interface ArchiveFile {
 
 export class UnsafeArchiveError extends Error {}
 
-/** Validates an archive entry path: relative, no `..`, no drive letters or backslashes. */
+/** Names Windows reserves for devices, with or without an extension (CON, con.txt, Aux.ts). */
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+/**
+ * Validates an archive entry path: relative, no `..`, no drive letters or backslashes, and
+ * nothing Windows cannot store (packages are extracted on the player's disk): no `:` (an NTFS
+ * alternate stream), none of `< > " | ? *` or control characters, no reserved device name, no
+ * segment ending in a dot or a space.
+ */
 export function safeRelativePath(raw: string): string {
   const path = raw.replace(/^\.\//, '');
   const segments = path.split('/');
@@ -25,13 +33,35 @@ export function safeRelativePath(raw: string): string {
     path === '' ||
     path.startsWith('/') ||
     path.includes('\\') ||
-    path.includes('\0') ||
+    /[\0-\x1f<>:"|?*]/.test(path) ||
     /^[A-Za-z]:/.test(path) ||
-    segments.some((segment) => segment === '..' || segment === '.' || segment === '');
+    segments.some(
+      (segment) =>
+        segment === '..' ||
+        segment === '.' ||
+        segment === '' ||
+        WINDOWS_RESERVED.test(segment) ||
+        /[. ]$/.test(segment),
+    );
   if (unsafe) {
     throw new UnsafeArchiveError(`Unsafe path in archive: ${JSON.stringify(raw)}`);
   }
   return path;
+}
+
+/** Windows keeps one file for `A.ts` and `a.ts`: an archive with both would lose one of them. */
+export function assertNoCaseCollisions(files: readonly { path: string }[]): void {
+  const seen = new Map<string, string>();
+  for (const file of files) {
+    const key = file.path.toLowerCase();
+    const earlier = seen.get(key);
+    if (earlier !== undefined && earlier !== file.path) {
+      throw new UnsafeArchiveError(
+        `Paths that differ only by case: ${JSON.stringify(earlier)} and ${JSON.stringify(file.path)}`,
+      );
+    }
+    seen.set(key, file.path);
+  }
 }
 
 export function sha256Hex(data: Uint8Array | string): string {
@@ -79,6 +109,7 @@ export async function readTar(input: Uint8Array | Readable): Promise<ArchiveFile
   source.on('error', (error) => extractor.destroy(error));
   source.pipe(extractor);
   await done;
+  assertNoCaseCollisions(files);
   return files;
 }
 
@@ -142,11 +173,13 @@ export function readZip(
     }
     prefix = `${[...tops][0]}/`;
   }
-  return entries.map(([name, data]) => ({
+  const files = entries.map(([name, data]) => ({
     path: safeRelativePath(name.slice(prefix.length)),
     data,
     executable: false,
   }));
+  assertNoCaseCollisions(files);
+  return files;
 }
 
 /** Writes a deterministic zip: sorted entries and a fixed timestamp, so the checksum is stable. */
