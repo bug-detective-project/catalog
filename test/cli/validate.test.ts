@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { validateLocal } from '../../src/cli/validate.ts';
+import { validateLocal, workflowReferenceProblems } from '../../src/cli/validate.ts';
 import { publishLocally } from '../helpers/publication.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
 import type { ProjectRepo } from '../helpers/project-repo.ts';
@@ -108,5 +108,55 @@ describe('bd validate', () => {
 
   it('refuses a base ref that does not exist instead of skipping the version check', async () => {
     await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'origin/typo' })).rejects.toThrow(/origin\/typo/);
+  });
+});
+
+describe('bd validate, the project workflow reference', () => {
+  const hash = 'a'.repeat(40);
+  async function commitQaFiles(files: Record<string, string>) {
+    const { mkdir } = await import('node:fs/promises');
+    for (const [path, text] of Object.entries(files)) {
+      await mkdir(join(repo.qaDir, path, '..'), { recursive: true });
+      await writeFile(join(repo.qaDir, path), text);
+    }
+    repo.git(repo.qaDir, 'add', '-A');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Workflow and dependency');
+  }
+  const workflow = (ref: string) =>
+    `jobs:\n  project:\n    uses: bug-detective-project/catalog/.github/workflows/project.yml@${ref}\n`;
+  const dependency = (version: string) =>
+    `${JSON.stringify({ name: 'demo-qa', bugDetective: { project: { id: 'demo', name: 'Demo' } }, dependencies: { '@bug-detective/catalog': `github:bug-detective-project/catalog#${version}` } }, null, 2)}\n`;
+
+  it('accepts a hash pin whose version comment matches the dependency', async () => {
+    await commitQaFiles({
+      '.github/workflows/publication.yml': workflow(`${hash} # v1.2.0`),
+      'package.json': dependency('v1.2.0'),
+    });
+    expect(await workflowReferenceProblems(repo.qaDir)).toEqual([]);
+    expect((await validateLocal({ qaDir: repo.qaDir })).version).toBe('1.0.0');
+  });
+
+  it('refuses a version comment that differs from the dependency, naming both', async () => {
+    await commitQaFiles({
+      '.github/workflows/publication.yml': workflow(`${hash} # v1.0.2`),
+      'package.json': dependency('v1.1.0'),
+    });
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /project\.yml v1\.0\.2.*depends on @bug-detective\/catalog v1\.1\.0/,
+    );
+  });
+
+  it('refuses a tag instead of a hash, and a hash without its version', async () => {
+    await commitQaFiles({
+      '.github/workflows/publication.yml': workflow('v1.1.0'),
+      'package.json': dependency('v1.1.0'),
+    });
+    const problems = await workflowReferenceProblems(repo.qaDir);
+    expect(problems.join('\n')).toMatch(/pin project\.yml by commit hash/);
+    expect(problems.join('\n')).toMatch(/which version the hash is/);
+  });
+
+  it('skips a qa branch without the workflow', async () => {
+    expect(await workflowReferenceProblems(repo.qaDir)).toEqual([]);
   });
 });
