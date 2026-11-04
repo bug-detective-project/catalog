@@ -38,6 +38,11 @@ describe('projects catalog', () => {
     ['a hidden starter', catalog(project('a', { starter: true, hidden: true })), /starter cannot be hidden/],
     ['a repository without owner', catalog({ id: 'a', repository: 'supportdesk', starter: true }), /repository/],
     [
+      'a repository outside the organization',
+      catalog({ id: 'a', repository: 'octocat/supportdesk', starter: true }),
+      /bug-detective-project\/<name>/,
+    ],
+    [
       'a minimum app version that is not X.Y.Z',
       catalog(project('a', { starter: true, minAppVersion: '1.2' })),
       /minAppVersion/,
