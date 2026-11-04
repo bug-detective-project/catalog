@@ -1,6 +1,7 @@
 name: ci
 
-# Every action is pinned by commit hash (tools/check-action-pins.mjs, run below and in the tests).
+# Every action is pinned by commit hash (tools/check-action-pins.mjs; the tests check this
+# repository, so check:ci runs nothing twice: typecheck, tests, Prettier).
 on:
   push:
     branches: [main]
@@ -20,8 +21,7 @@ jobs:
           node-version: 26.12.1
           cache: npm
       - run: npm ci
-      - run: npm run check:action-pins
-      - run: npm run check
+      - run: npm run check:ci
       - name: dist matches the sources
         run: |
           npm run build
