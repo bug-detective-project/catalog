@@ -1,6 +1,6 @@
 {
   "name": "@bug-detective/catalog",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Bug Detective projects catalog, content contract and bd CLI",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
