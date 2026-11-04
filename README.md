@@ -206,6 +206,6 @@ GitHub Actions minutes are free for public repositories.
 
 ```sh
 npm install
-npm run check   # typecheck, tests, Prettier
+npm run check   # typecheck, action pins, tests, Prettier (the CI runs check:ci: the tests already check the pins)
 npm run build   # dist/ (commit it)
 ```
