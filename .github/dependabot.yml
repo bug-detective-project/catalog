@@ -1,0 +1,8 @@
+# Keeps the hash-pinned GitHub Actions current (tools/check-action-pins.mjs requires hashes).
+# No npm ecosystem on purpose: dependencies are updated by hand, after the release-age rule.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
