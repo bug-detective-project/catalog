@@ -4,9 +4,11 @@
  * and its version must be newer than the published one.
  */
 import { compareVersions, parseManifest } from '../contract/manifest.ts';
+import { textProblems, vscodeProblems } from '../contract/policy.ts';
+import type { TextFile } from '../contract/policy.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
-import { buildManifest } from './manifest.ts';
-import { gitIn } from './git.ts';
+import { buildManifest, readQaFiles } from './manifest.ts';
+import { gitArchive, gitIn, resolveBranchRef } from './git.ts';
 import { run } from './process.ts';
 
 export interface ValidateLocalOptions {
@@ -81,6 +83,64 @@ export async function workflowReferenceProblems(qaDir: string, ref = 'HEAD'): Pr
   return problems;
 }
 
+const TEXT_FILE = /^tickets\/[^/]+\/(?:ticket|solution|review)\.(?:en|pt)\.md$/;
+const HINTS_FILE = /^tickets\/[^/]+\/hints\.(?:en|pt)\.json$/;
+const STORY_FILE = /^story\.(?:en|pt)\.json$/;
+
+const decoder = new TextDecoder();
+
+/** Every string of a JSON value, one per line, so a match can name its position. */
+function jsonStrings(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(jsonStrings);
+  if (value && typeof value === 'object') return Object.values(value as Record<string, unknown>).flatMap(jsonStrings);
+  return [];
+}
+
+/** The player-facing texts of the committed qa folder: markdown as is, JSON as its strings. */
+export async function projectTexts(qaDir: string): Promise<TextFile[]> {
+  const texts: TextFile[] = [];
+  for (const file of await readQaFiles(qaDir)) {
+    const text = decoder.decode(file.data);
+    if (TEXT_FILE.test(file.path)) {
+      texts.push({ path: file.path, text });
+    } else if (HINTS_FILE.test(file.path) || STORY_FILE.test(file.path)) {
+      try {
+        texts.push({ path: file.path, text: jsonStrings(JSON.parse(text)).join('\n') });
+      } catch {
+        // An invalid JSON file is reported by the schema checks, not here.
+      }
+    }
+  }
+  return texts;
+}
+
+/** The .vscode/ files of main and of every ticket branch, per branch. */
+export async function vscodeFilesOf(
+  qaDir: string,
+  branches: readonly string[],
+): Promise<{ branch: string; files: TextFile[] }[]> {
+  const result: { branch: string; files: TextFile[] }[] = [];
+  for (const branch of ['main', ...branches]) {
+    const ref = await resolveBranchRef(qaDir, branch).catch(() => null);
+    if (!ref) continue;
+    const files = (await gitArchive(qaDir, ref))
+      .filter((file) => file.path.startsWith('.vscode/'))
+      .map((file) => ({ path: file.path, text: decoder.decode(file.data) }));
+    result.push({ branch, files });
+  }
+  return result;
+}
+
+/** The policy checks of a publication: VS Code files and extensions, and dangerous commands in the texts. */
+export async function policyProblems(qaDir: string, branches: readonly string[]): Promise<string[]> {
+  const problems: string[] = [];
+  for (const { branch, files } of await vscodeFilesOf(qaDir, branches)) {
+    problems.push(...vscodeProblems(files).map((problem) => `${branch}: ${problem}`));
+  }
+  return [...problems, ...textProblems(await projectTexts(qaDir))];
+}
+
 export async function validateLocal({ qaDir, baseRef = 'origin/qa' }: ValidateLocalOptions): Promise<ProjectManifest> {
   const git = gitIn(qaDir);
   const problems: string[] = [];
@@ -115,6 +175,13 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }: ValidateLo
   } catch (error) {
     problems.push((error as Error).message);
   }
+
+  problems.push(
+    ...(await policyProblems(
+      qaDir,
+      manifest.entries.map((entry) => entry.branch),
+    )),
+  );
 
   for (const entry of manifest.entries) {
     const tagged = await run('git', [
