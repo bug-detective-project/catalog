@@ -1,0 +1,35 @@
+name: validate-remote
+
+# Validates a proposed project as the catalog would read it (bd validate --remote): manifest,
+# ticket tags, policy and dependencies, through GitHub's API only. Run by hand from the Actions tab
+# for a "New project" issue; nothing of the proposed repository is cloned or executed here, so there
+# is no trigger on the issue itself.
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: The project's repository, as owner/name
+        type: string
+        required: true
+      ref:
+        description: The branch or tag to validate
+        type: string
+        default: qa
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+          cache: npm
+      - run: npm ci
+      - run: node dist/cli/main.js validate --remote "$REPOSITORY" --ref "$REF"
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+          REF: ${{ inputs.ref }}

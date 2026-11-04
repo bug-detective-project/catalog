@@ -175,12 +175,30 @@ jobs:
       contents: write
 ```
 
+## Proposing a project
+
+A project of someone outside the organization starts in the author's own repository, with `main`,
+`qa` and the ticket branches as any project. The author opens a "New project" issue here (the issue
+form asks for the repository, the stack, the skills and the offline rule: no bug needs a new package
+and the app calls no external API). A maintainer runs the `validate-remote` workflow (Actions tab,
+"Run workflow", with the repository and the branch or tag) which runs `bd validate --remote` through
+GitHub's API without cloning or executing anything, then reviews the repository against the pull
+request checklist (`.github/pull_request_template.md`: scripts, dependencies, network calls, texts,
+`.vscode/`, `.npmrc`, the `Host` check). The repository then moves into the organization with the
+author as a writer, and the project enters `projects.json` (first `hidden: true`). From then on the
+author publishes with `bd publish` and a pull request into `qa`, merged by a code owner.
+
 ## Checks of this repository
 
-- `ci` (push and pull request into `main`): typecheck, tests, Prettier, and `dist/` up to date.
+- `ci` (push and pull request into `main`): every action pinned by commit hash
+  (`tools/check-action-pins.mjs`), typecheck, tests, Prettier, and `dist/` up to date.
 - `catalog` (pull request into `main`, every day at 06:00 UTC, and on demand): `bd catalog-check`.
   GitHub disables a scheduled workflow after 60 days without activity in a public repository and
   sends an e-mail; re-enable it in the Actions tab.
+- `validate-remote` (on demand): `bd validate --remote` on a proposed project.
+
+Actions are referenced by commit hash with the version in a comment; Dependabot
+(`.github/dependabot.yml`) opens a pull request when one has a new release.
 
 GitHub Actions minutes are free for public repositories.
 

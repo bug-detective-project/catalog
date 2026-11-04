@@ -1,0 +1,60 @@
+name: New project
+description: Propose a game project for the catalog (see "Proposing a project" in the README)
+title: 'New project: '
+labels: [new-project]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A project is reviewed before it moves into the `bug-detective-project` organization. Fill in
+        every field; a maintainer runs the `validate-remote` workflow on your repository and reviews
+        it against the pull request checklist (`.github/pull_request_template.md`).
+  - type: input
+    id: name
+    attributes:
+      label: Project name
+      description: The `name` of `bugDetective.project` in the `package.json` of your `qa` branch.
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: Repository
+      description: The public repository that holds the `main` and `qa` branches, as `owner/name`.
+      placeholder: your-login/your-project
+    validations:
+      required: true
+  - type: input
+    id: ref
+    attributes:
+      label: Branch or tag to review
+      description: What `bd validate --remote` should read. The default is `qa`.
+      value: qa
+  - type: input
+    id: stack
+    attributes:
+      label: Stack
+      description: Frontend, backend and database, as in `bugDetective.project.stack`.
+      placeholder: React · Vite / Node.js · Express / SQLite
+    validations:
+      required: true
+  - type: textarea
+    id: skills
+    attributes:
+      label: Skills the player practices
+      description: The 1 to 5 `project.skills` of `story.en.json`, one per line.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before proposing
+      options:
+        - label: '`npx bd validate` and `npx bd verify` pass on my `qa` branch'
+          required: true
+        - label: 'The project works offline: no bug needs a new package and the app calls no external API'
+          required: true
+        - label: 'The player-facing texts ask for no command outside the workspace, and `.vscode/` only recommends allowed extensions'
+          required: true
+        - label: 'The repository can move into the `bug-detective-project` organization (I keep write access as the author)'
+          required: true

@@ -26,7 +26,8 @@
     "test": "vitest run",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run typecheck && npm test && npm run format:check"
+    "check": "npm run typecheck && npm run check:action-pins && npm test && npm run format:check",
+    "check:action-pins": "node tools/check-action-pins.mjs"
   },
   "dependencies": {
     "fflate": "0.8.3",
