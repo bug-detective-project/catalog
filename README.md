@@ -67,7 +67,7 @@ fine. Changing a list is a pull request to this repository.
 Depend on a tagged version, never on `main`:
 
 ```json
-"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.0.2"
+"@bug-detective/catalog": "github:bug-detective-project/catalog#v1.2.0"
 ```
 
 `dist/` is committed, because Node does not run TypeScript from `node_modules` and pnpm does not
@@ -170,7 +170,7 @@ on:
 
 jobs:
   project:
-    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.0.2
+    uses: bug-detective-project/catalog/.github/workflows/project.yml@v1.2.0
     permissions:
       contents: write
 ```
