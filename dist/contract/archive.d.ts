@@ -7,8 +7,17 @@ export interface ArchiveFile {
 }
 export declare class UnsafeArchiveError extends Error {
 }
-/** Validates an archive entry path: relative, no `..`, no drive letters or backslashes. */
+/**
+ * Validates an archive entry path: relative, no `..`, no drive letters or backslashes, and
+ * nothing Windows cannot store (packages are extracted on the player's disk): no `:` (an NTFS
+ * alternate stream), none of `< > " | ? *` or control characters, no reserved device name, no
+ * segment ending in a dot or a space.
+ */
 export declare function safeRelativePath(raw: string): string;
+/** Windows keeps one file for `A.ts` and `a.ts`: an archive with both would lose one of them. */
+export declare function assertNoCaseCollisions(files: readonly {
+    path: string;
+}[]): void;
 export declare function sha256Hex(data: Uint8Array | string): string;
 /**
  * Digest of a set of files that does not depend on the archive format: SHA-256 over the sorted

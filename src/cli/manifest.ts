@@ -1,7 +1,7 @@
 /** Builds a project's manifest from its qa folder (a worktree of the qa branch) and its ticket branches. */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { treeDigest } from '../contract/archive.ts';
+import { assertNoCaseCollisions, safeRelativePath, treeDigest } from '../contract/archive.ts';
 import type { ArchiveFile } from '../contract/archive.ts';
 import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
@@ -99,9 +99,11 @@ export async function readQaFiles(qaDir: string): Promise<ArchiveFile[]> {
   for (const path of paths) {
     const data = await readFile(join(qaDir, ...path.split('/'))).catch(() => null);
     if (data) {
-      files.push({ path, data: new Uint8Array(normalizeLineEndings(data)), executable: false });
+      // Players extract the packages on their disk, which may be Windows.
+      files.push({ path: safeRelativePath(path), data: new Uint8Array(normalizeLineEndings(data)), executable: false });
     }
   }
+  assertNoCaseCollisions(files);
   return files;
 }
 

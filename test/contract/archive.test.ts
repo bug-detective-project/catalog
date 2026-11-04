@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   UnsafeArchiveError,
+  assertNoCaseCollisions,
   readZip,
   safeRelativePath,
   textFile,
@@ -26,8 +27,61 @@ describe('safeRelativePath', () => {
     expect(() => safeRelativePath(path)).toThrow(UnsafeArchiveError);
   });
 
+  it.each([
+    'tests/a:b.txt',
+    'con',
+    'CON.txt',
+    'tests/aux.ts',
+    'nul.json',
+    'com1.txt',
+    'lpt9',
+    'notes.',
+    'notes /x',
+    'a<b',
+    'a>b',
+    'a"b',
+    'a|b',
+    'a?b',
+    'a*b',
+    'a\u0001b',
+  ])('refuses %j, which Windows cannot store', (path) => {
+    expect(() => safeRelativePath(path)).toThrow(UnsafeArchiveError);
+  });
+
+  it.each([
+    'config.json',
+    'console.ts',
+    'src/components/Auxiliary.tsx',
+    'a.b.c',
+    'com10.txt',
+    'prn-report.md',
+    'nulled/x.ts',
+  ])('accepts %j', (path) => {
+    expect(safeRelativePath(path)).toBe(path);
+  });
+
   it('drops a leading ./', () => {
     expect(safeRelativePath('./a/b')).toBe('a/b');
+  });
+});
+
+describe('assertNoCaseCollisions', () => {
+  it('refuses two paths that differ only by case, naming both', () => {
+    expect(() => assertNoCaseCollisions([{ path: 'src/A.ts' }, { path: 'src/b.ts' }, { path: 'src/a.ts' }])).toThrow(
+      /"src\/A\.ts" and "src\/a\.ts"/,
+    );
+  });
+
+  it('accepts distinct paths and the same path listed twice', () => {
+    expect(() => assertNoCaseCollisions([{ path: 'a.ts' }, { path: 'b.ts' }, { path: 'a.ts' }])).not.toThrow();
+  });
+
+  it('is applied when a zip is read', () => {
+    const zip = writeZip([
+      { path: 'A.ts', data: new Uint8Array([1]), executable: false },
+      { path: 'a.ts', data: new Uint8Array([2]), executable: false },
+    ]);
+    expect(() => readZip(zip)).toThrow(UnsafeArchiveError);
   });
 });
 
