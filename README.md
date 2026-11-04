@@ -125,7 +125,9 @@ jobs:
     uses: bug-detective-project/catalog/.github/workflows/app.yml@v1.2.0
 ```
 
-On `qa`, `.github/workflows/publication.yml` validates every pull request and tags the merge:
+On `qa`, `.github/workflows/publication.yml` validates every pull request and tags the merge. Pin
+`project.yml` by commit hash with the version in a comment, equal to the `@bug-detective/catalog`
+dependency of `qa` (`bd validate` refuses a tag pin or a version that differs from the dependency):
 
 ```yaml
 name: publication

@@ -16,6 +16,48 @@ async function manifestAt(qaDir, ref) {
 function differences(published, rebuilt) {
     return Object.keys(rebuilt).filter((key) => JSON.stringify(published[key]) !== JSON.stringify(rebuilt[key]));
 }
+/** A committed file of the qa folder, or undefined when it is not there. */
+async function fileAt(qaDir, ref, path) {
+    const result = await run('git', ['-c', 'safe.directory=*', '-C', qaDir, 'show', `${ref}:${path}`]);
+    return result.code === 0 ? result.stdout.toString('utf8') : undefined;
+}
+const WORKFLOW_USES = /uses:\s*["']?bug-detective-project\/catalog\/\.github\/workflows\/project\.yml@([^\s"'#]+)["']?(?:\s*#\s*(v\d+\.\d+\.\d+))?/;
+/**
+ * The project workflow must call this repository's project.yml pinned by commit hash, with the
+ * version in a comment that matches the @bug-detective/catalog dependency of the qa branch: the
+ * checks and the CLI then come from the same version.
+ */
+export async function workflowReferenceProblems(qaDir, ref = 'HEAD') {
+    const workflow = await fileAt(qaDir, ref, '.github/workflows/publication.yml');
+    if (workflow === undefined) {
+        return [];
+    }
+    const match = WORKFLOW_USES.exec(workflow);
+    if (!match) {
+        return [
+            '.github/workflows/publication.yml does not call bug-detective-project/catalog/.github/workflows/project.yml',
+        ];
+    }
+    const [, pinned, comment] = match;
+    const problems = [];
+    if (!/^[0-9a-f]{40}$/.test(pinned)) {
+        problems.push(`.github/workflows/publication.yml must pin project.yml by commit hash (uses: ...project.yml@<40 hex> # vX.Y.Z), not "@${pinned}"`);
+    }
+    const packageJson = await fileAt(qaDir, ref, 'package.json');
+    const spec = packageJson
+        ? (JSON.parse(packageJson)
+            .dependencies?.['@bug-detective/catalog'] ??
+            JSON.parse(packageJson).devDependencies?.['@bug-detective/catalog'])
+        : undefined;
+    const dependency = /#(v\d+\.\d+\.\d+)$/.exec(spec ?? '')?.[1];
+    if (!comment) {
+        problems.push('.github/workflows/publication.yml must say which version the hash is: uses: ...project.yml@<hash> # vX.Y.Z');
+    }
+    else if (dependency && comment !== dependency) {
+        problems.push(`.github/workflows/publication.yml calls project.yml ${comment}, but package.json depends on @bug-detective/catalog ${dependency}: use the same version in both`);
+    }
+    return problems;
+}
 export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
     const git = gitIn(qaDir);
     const problems = [];
@@ -23,6 +65,7 @@ export async function validateLocal({ qaDir, baseRef = 'origin/qa' }) {
     if (dirty) {
         problems.push(`These ticket files are not committed (players only get committed files):\n${dirty}`);
     }
+    problems.push(...(await workflowReferenceProblems(qaDir)));
     const raw = await manifestAt(qaDir, 'HEAD');
     if (raw === undefined) {
         throw new Error('The qa branch has no committed manifest.json: run bd publish first');
