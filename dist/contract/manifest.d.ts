@@ -43,6 +43,8 @@ export declare const ticketEntrySchema: z.ZodObject<{
         pt: z.ZodArray<z.ZodString>;
     }, z.core.$strict>>;
 }, z.core.$strip>;
+/** A project id: it names folders, Docker resources and labels, so it is plain lower-case. */
+export declare const PROJECT_ID: RegExp;
 /** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */
 export declare const projectStackSchema: z.ZodObject<{
     frontend: z.ZodOptional<z.ZodString>;

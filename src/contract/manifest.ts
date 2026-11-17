@@ -40,6 +40,9 @@ export const ticketEntrySchema = z.object({
   skills: ticketSkillsSchema.optional(),
 });
 
+/** A project id: it names folders, Docker resources and labels, so it is plain lower-case. */
+export const PROJECT_ID = /^[a-z][a-z0-9-]{0,39}$/;
+
 const stackValue = z.string().min(1).max(60);
 
 /** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */
@@ -53,7 +56,7 @@ export const manifestSchema = z
     format: z.literal('bug-detective-project'),
     formatVersion: z.number().int().min(1).max(SUPPORTED_FORMAT_VERSION),
     project: z.object({
-      id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/),
+      id: z.string().regex(PROJECT_ID),
       name: z.string().min(1).max(100),
       /** Shown on the Projects screen (package.json bugDetective.project.difficulty). */
       difficulty: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
