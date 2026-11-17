@@ -45,6 +45,18 @@ async function main(argv) {
                 qaDir: await qaFolder(),
                 ids: positionals.length > 0 ? positionals : undefined,
                 log,
+                // Ctrl+C: remove the services of the QA run in progress before leaving.
+                onInterrupt: (handler) => {
+                    const leave = () => {
+                        void handler().finally(() => process.exit(130));
+                    };
+                    process.once('SIGINT', leave);
+                    process.once('SIGTERM', leave);
+                    return () => {
+                        process.off('SIGINT', leave);
+                        process.off('SIGTERM', leave);
+                    };
+                },
             });
             for (const row of rows.filter((item) => !item.ok)) {
                 console.error(`${row.id}: unexpected result\n${row.logs ?? ''}`);

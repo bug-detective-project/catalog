@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { formatTable, gatesOf, npmInvocation, verifyTickets } from '../../src/cli/verify.ts';
+import { DockerUnavailableError } from '../../src/cli/services.ts';
 import type { RunQa } from '../../src/cli/verify.ts';
 import { useRealPatches } from '../helpers/patches.ts';
 import { createProjectRepo } from '../helpers/project-repo.ts';
@@ -94,6 +95,126 @@ describe('bd verify', () => {
     const { rows } = await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa: noisy });
     expect(rows[0].ok).toBe(false);
     expect(rows[0].logs).toContain('gate 1 log of front-1');
+  });
+});
+
+describe('bd verify of a project with services', () => {
+  let dir: string;
+  let repo: ProjectRepo;
+  const ids = ['front-1', 'back-1'];
+  const declared = { db: { image: 'postgres:17', variables: { DATABASE_URL: 'pg://{{host}}:{{port}}' } } };
+
+  /** Records, in order, every sweep, start, QA run and stop. */
+  function recorder() {
+    const events: string[] = [];
+    let starts = 0;
+    const services = {
+      sweep: async () => {
+        events.push('sweep');
+        return [];
+      },
+      start: async (given: unknown, options: { project: string }) => {
+        starts += 1;
+        const n = starts;
+        events.push(`start ${n} ${options.project} ${Object.keys(given as object).join(',')}`);
+        return { env: { DATABASE_URL: `pg://127.0.0.1:${5000 + n}` }, stop: async () => void events.push(`stop ${n}`) };
+      },
+    };
+    const runQa: RunQa = async ({ id, workspace, env }) => {
+      events.push(`qa ${id} ${env?.DATABASE_URL ?? 'no env'}`);
+      const fixed = (await readFile(join(workspace, 'app.txt'), 'utf8')) === 'fixed\n';
+      return { gate: 2, status: fixed ? 'passed' : 'failed' };
+    };
+    return { events, services, runQa };
+  }
+
+  async function declare(project: Record<string, unknown>) {
+    const file = join(repo.qaDir, 'package.json');
+    const pkg = JSON.parse(await readFile(file, 'utf8'));
+    Object.assign(pkg.bugDetective.project, project);
+    await writeFile(file, JSON.stringify(pkg));
+  }
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'bd-verify-services-'));
+    repo = await createProjectRepo(dir, { front: 1, back: 1 });
+    await useRealPatches(repo, ids);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('starts nothing for a project without services', async () => {
+    const { events, services, runQa } = recorder();
+    const { ok } = await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa, services });
+    expect(ok).toBe(true);
+    expect(events).toEqual(['qa front-1 no env', 'qa front-1 no env']);
+  });
+
+  it('sweeps once, then gives every QA run fresh services and removes them after it', async () => {
+    await declare({ services: declared });
+    const { events, services, runQa } = recorder();
+    const { ok } = await verifyTickets({ qaDir: repo.qaDir, runQa, services });
+    expect(ok).toBe(true);
+    expect(events).toEqual([
+      'sweep',
+      'start 1 demo db',
+      'qa front-1 pg://127.0.0.1:5001',
+      'stop 1',
+      'start 2 demo db',
+      'qa front-1 pg://127.0.0.1:5002',
+      'stop 2',
+      'start 3 demo db',
+      'qa back-1 pg://127.0.0.1:5003',
+      'stop 3',
+      'start 4 demo db',
+      'qa back-1 pg://127.0.0.1:5004',
+      'stop 4',
+    ]);
+  });
+
+  it('removes the services when the QA tool throws', async () => {
+    await declare({ services: declared });
+    const { events, services } = recorder();
+    const runQa: RunQa = async () => {
+      throw new Error('the QA tool wrote no result');
+    };
+    await expect(verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa, services })).rejects.toThrow(/no result/);
+    expect(events).toEqual(['sweep', 'start 1 demo db', 'stop 1']);
+    expect(repo.git(repo.qaDir, 'worktree', 'list').split('\n')).toHaveLength(2);
+  });
+
+  it('removes the running services when the run is interrupted', async () => {
+    await declare({ services: declared });
+    const { events, services } = recorder();
+    let interrupt: (() => Promise<void>) | undefined;
+    let unregistered = false;
+    const onInterrupt = (handler: () => Promise<void>) => {
+      interrupt = handler;
+      return () => {
+        unregistered = true;
+      };
+    };
+    const runQa: RunQa = async () => {
+      await interrupt!();
+      events.push('interrupted');
+      return { gate: 2, status: 'failed' };
+    };
+    await verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa, services, onInterrupt });
+    expect(events.slice(0, 4)).toEqual(['sweep', 'start 1 demo db', 'stop 1', 'interrupted']);
+    expect(unregistered).toBe(true);
+  });
+
+  it('lets the missing Docker error through, with its own message', async () => {
+    await declare({ services: declared });
+    const { services, runQa } = recorder();
+    const start = async () => {
+      throw new DockerUnavailableError('the docker command was not found');
+    };
+    await expect(
+      verifyTickets({ qaDir: repo.qaDir, ids: ['front-1'], runQa, services: { ...services, start } }),
+    ).rejects.toThrow('Docker is required to verify a project with services: the docker command was not found');
   });
 });
 

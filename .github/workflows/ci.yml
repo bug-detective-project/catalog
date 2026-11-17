@@ -22,6 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check:ci
+        env:
+          # Runs test/cli/services.docker.test.ts: a real PostgreSQL started and removed by bd.
+          BD_DOCKER_TESTS: '1'
       - name: dist matches the sources
         run: |
           npm run build

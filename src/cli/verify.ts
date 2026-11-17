@@ -7,8 +7,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitIn, resolveBranchRef } from './git.ts';
+import { readProject } from './manifest.ts';
 import { run } from './process.ts';
+import { startServices, sweepVerifyServices } from './services.ts';
+import type { RunningServices } from './services.ts';
 import { ticketIdsOf } from './tickets.ts';
+import type { ProjectServices } from '../contract/services.ts';
 
 export interface QaResult {
   gate: 1 | 2;
@@ -30,13 +34,32 @@ export interface VerifyRow {
 }
 
 /** Runs the QA tool on a workspace; `position` is the ticket's place in the queue (1 = front-1). */
-export type RunQa = (args: { qaDir: string; id: string; position: number; workspace: string }) => Promise<QaResult>;
+export type RunQa = (args: {
+  qaDir: string;
+  id: string;
+  position: number;
+  workspace: string;
+  /** The variables of the project's services, when it declares any; added to the QA tool's environment. */
+  env?: Record<string, string>;
+}) => Promise<QaResult>;
+
+/** How the services of a project are started and swept; replaced in tests. */
+export interface VerifyServices {
+  start: (services: ProjectServices, options: { project: string }) => Promise<RunningServices>;
+  sweep: () => Promise<string[]>;
+}
 
 export interface VerifyOptions {
   qaDir: string;
   /** Default: every ticket. */
   ids?: string[];
   runQa?: RunQa;
+  services?: VerifyServices;
+  /**
+   * Registers what to do when the run is interrupted (Ctrl+C): remove the services of the QA run in
+   * progress. Returns how to unregister it.
+   */
+  onInterrupt?: (handler: () => Promise<void>) => () => void;
   /** Progress, one line as each ticket starts and one as it ends (the table only comes at the end). */
   log?: (line: string) => void;
 }
@@ -55,7 +78,7 @@ export function npmInvocation(platform: NodeJS.Platform): { command: string; she
 }
 
 /** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
-export const npmQa: RunQa = async ({ qaDir, id, position, workspace }) => {
+export const npmQa: RunQa = async ({ qaDir, id, position, workspace, env }) => {
   const out = join(await mkdtemp(join(tmpdir(), 'bd-qa-')), 'result.json');
   try {
     const args = [
@@ -77,6 +100,7 @@ export const npmQa: RunQa = async ({ qaDir, id, position, workspace }) => {
     const result = await run(npm.command, npm.shell ? args.map((arg) => `"${arg}"`) : args, {
       cwd: qaDir,
       shell: npm.shell,
+      ...(env && { env: { ...process.env, ...env } }),
     });
     const json = await readFile(out, 'utf8').catch(() => {
       throw new Error(`${id}: the QA tool wrote no result (exit ${result.code}):\n${result.stdout}${result.stderr}`);
@@ -91,44 +115,75 @@ export async function verifyTickets({
   qaDir,
   ids,
   runQa = npmQa,
+  services = { start: startServices, sweep: sweepVerifyServices },
+  onInterrupt,
   log = () => {},
 }: VerifyOptions): Promise<{ rows: VerifyRow[]; ok: boolean }> {
   const git = gitIn(qaDir);
+  const project = await readProject(qaDir);
+  const declared = Object.keys(project.services ?? {}).length > 0 ? project.services : undefined;
+  let active: RunningServices | undefined;
+  // Every QA run gets its own services, started just before it and removed right after, so no run
+  // sees the data of another.
+  const qa: RunQa = async (args) => {
+    if (!declared) {
+      return runQa(args);
+    }
+    const running = await services.start(declared, { project: project.id });
+    active = running;
+    try {
+      return await runQa({ ...args, env: running.env });
+    } finally {
+      active = undefined;
+      await running.stop();
+    }
+  };
+  const unregister = declared ? onInterrupt?.(async () => active?.stop()) : undefined;
+  if (declared) {
+    const swept = await services.sweep();
+    if (swept.length > 0) {
+      log(`Removed ${swept.length} service container(s) left by an earlier run`);
+    }
+  }
   const queue = await ticketIdsOf(git);
   const rows: VerifyRow[] = [];
   const selected = ids ?? queue;
-  for (const [index, id] of selected.entries()) {
-    const position = queue.indexOf(id) + 1;
-    if (position === 0) {
-      throw new Error(`Unknown ticket: ${id}`);
+  try {
+    for (const [index, id] of selected.entries()) {
+      const position = queue.indexOf(id) + 1;
+      if (position === 0) {
+        throw new Error(`Unknown ticket: ${id}`);
+      }
+      log(`${id}: running QA (${index + 1}/${selected.length})…`);
+      const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
+      const workspace = join(scratch, id);
+      try {
+        await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
+        const buggyRun = await qa({ qaDir, id, position, workspace });
+        const buggy = gatesOf(buggyRun);
+        const applied = await gitIn(workspace)
+          .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
+          .then(
+            () => true,
+            () => false,
+          );
+        const fixedRun = applied ? await qa({ qaDir, id, position, workspace }) : undefined;
+        const fixed: VerifyRow['fixed'] = fixedRun ? gatesOf(fixedRun) : 'patch-failed';
+        const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
+        const logs = [
+          `--- buggy run\n${buggyRun.output ?? ''}`,
+          `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
+        ].join('\n');
+        rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
+        const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
+        log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
+      } finally {
+        await git.text('worktree', 'remove', '--force', workspace).catch(() => {});
+        await rm(scratch, { recursive: true, force: true });
+      }
     }
-    log(`${id}: running QA (${index + 1}/${selected.length})…`);
-    const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
-    const workspace = join(scratch, id);
-    try {
-      await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
-      const buggyRun = await runQa({ qaDir, id, position, workspace });
-      const buggy = gatesOf(buggyRun);
-      const applied = await gitIn(workspace)
-        .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
-        .then(
-          () => true,
-          () => false,
-        );
-      const fixedRun = applied ? await runQa({ qaDir, id, position, workspace }) : undefined;
-      const fixed: VerifyRow['fixed'] = fixedRun ? gatesOf(fixedRun) : 'patch-failed';
-      const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
-      const logs = [
-        `--- buggy run\n${buggyRun.output ?? ''}`,
-        `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
-      ].join('\n');
-      rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
-      const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
-      log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
-    } finally {
-      await git.text('worktree', 'remove', '--force', workspace).catch(() => {});
-      await rm(scratch, { recursive: true, force: true });
-    }
+  } finally {
+    unregister?.();
   }
   return { rows, ok: rows.every((row) => row.ok) };
 }

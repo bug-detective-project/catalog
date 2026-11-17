@@ -152,6 +152,51 @@ describe('buildManifest', () => {
     expect((await build()).project.stack).toEqual(stack);
   });
 
+  describe('services and memory', () => {
+    const services = {
+      db: {
+        image: 'postgres:17',
+        memory: '256m',
+        env: { POSTGRES_PASSWORD: 'shop' },
+        variables: { DATABASE_URL: 'postgres://postgres:shop@{{host}}:{{port}}/postgres' },
+      },
+    };
+    const declare = async (project: Record<string, unknown>) => {
+      const file = join(repo.qaDir, 'package.json');
+      const pkg = JSON.parse(await readFile(file, 'utf8'));
+      Object.assign(pkg.bugDetective.project, project);
+      await writeFile(file, JSON.stringify(pkg));
+    };
+
+    it('copies bugDetective.project.services and memory into the manifest', async () => {
+      await declare({ services, memory: { workspace: '4g' } });
+      const { project } = await build();
+      expect(project.services).toEqual(services);
+      expect(project.memory).toEqual({ workspace: '4g' });
+    });
+
+    it('has neither when package.json gives none', async () => {
+      const { project } = await build();
+      expect(project).not.toHaveProperty('services');
+      expect(project).not.toHaveProperty('memory');
+    });
+
+    it('refuses an invalid declaration, naming the file and the field', async () => {
+      await declare({ services: { db: { ...services.db, memory: '2g' } } });
+      await expect(build()).rejects.toThrow(
+        /package\.json: bugDetective\.project\.services\.db\.memory: must be between 64m and 1g/,
+      );
+    });
+
+    it('refuses a memory peak above the limit', async () => {
+      const four = Object.fromEntries(
+        ['a', 'b', 'c', 'd'].map((name) => [name, { image: 'postgres:17', memory: '1g' }]),
+      );
+      await declare({ services: four, memory: { workspace: '4g' } });
+      await expect(build()).rejects.toThrow(/bugDetective\.project\.memory: the peak is 14 GB/);
+    });
+  });
+
   it('has no stack when package.json gives none', async () => {
     expect((await build()).project).not.toHaveProperty('stack');
   });
