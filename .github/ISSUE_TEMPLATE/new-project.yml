@@ -45,6 +45,13 @@ body:
       description: The 1 to 12 `project.skills` of `story.en.json`, one per line. The card shows the first 5.
     validations:
       required: true
+  - type: textarea
+    id: services
+    attributes:
+      label: Services the project needs
+      description: Optional. The `bugDetective.project.services` of the `package.json` on `qa` (see "Project services" in the README), and the memory peak. An image that is not on the list needs a pull request to the catalog first.
+    validations:
+      required: false
   - type: checkboxes
     id: checks
     attributes:

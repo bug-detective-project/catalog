@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { assertNoCaseCollisions, safeRelativePath, treeDigest } from '../contract/archive.js';
 import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.js';
 import { projectContentOf } from '../contract/project-files.js';
+import { projectServicesProblems } from '../contract/services.js';
 import { ticketMetaOf } from '../contract/ticket-meta.js';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.js';
 import { ticketQueue, trackedTicketFiles } from './tickets.js';
@@ -34,11 +35,18 @@ export async function readProject(qaDir) {
         }
         stack = parsed.data;
     }
+    const { services, memory } = project;
+    const problem = projectServicesProblems({ services, memory })[0];
+    if (problem) {
+        throw new Error(`${qaDir}/package.json: bugDetective.project.${problem}`);
+    }
     return {
         id: project.id,
         name: project.name,
         ...(difficulty !== undefined && { difficulty: difficulty }),
         ...(stack !== undefined && { stack }),
+        ...(services !== undefined && { services: services }),
+        ...(memory !== undefined && { memory: memory }),
     };
 }
 /** Files and folders every tickets/<id>/ must have. */

@@ -107,6 +107,19 @@ describe('startServices', () => {
     expect(of('rm')).toHaveLength(1);
   });
 
+  it('fails with the container log when a service exits before its port can be read', async () => {
+    const { docker, of } = fakeDocker({
+      port: () => ({ code: 1, stdout: '', stderr: 'no public port' }),
+      inspect: () => ({ stdout: 'false\n' }),
+      logs: () => ({ stderr: 'Error: superuser password is not specified.\n' }),
+    });
+    await expect(start(docker)).rejects.toThrow(
+      /The service db \(postgres:17\) stopped before it was ready:\nError: superuser password/,
+    );
+    expect(of('exec')).toHaveLength(0);
+    expect(of('rm')).toHaveLength(1);
+  });
+
   it('fails when a service is not ready in time, and removes it', async () => {
     const { docker, of } = fakeDocker({ exec: () => ({ code: 1 }), inspect: () => ({ stdout: 'true\n' }) });
     await expect(start(docker, { readyTimeoutMs: 20 })).rejects.toThrow(

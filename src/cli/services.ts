@@ -111,9 +111,20 @@ export async function startServices(
       if (started.code !== 0) {
         throw new Error(`${label} could not be started: ${lastLine(started.stderr) || `exit ${started.code}`}`);
       }
+      const isRunning = async (): Promise<boolean> =>
+        (await docker(['inspect', '--format', '{{.State.Running}}', name])).stdout.trim() === 'true';
+      /** The error of a service that did not get ready, with the end of its log. */
+      const notReady = async (reason: string): Promise<Error> => {
+        const logs = await docker(['logs', '--tail', '20', name]);
+        return new Error(`${label} ${reason}:\n${`${logs.stdout}${logs.stderr}`.trim()}`);
+      };
       const published = await docker(['port', name, `${image.port}/tcp`]);
       const port = Number(/:(\d+)\s*$/m.exec(published.stdout.trim().split('\n')[0] ?? '')?.[1]);
       if (published.code !== 0 || !Number.isInteger(port)) {
+        // A container that exits at once has no port any more: its log says why.
+        if (!(await isRunning())) {
+          throw await notReady('stopped before it was ready');
+        }
         throw new Error(`${label} has no published port: ${lastLine(published.stderr) || published.stdout.trim()}`);
       }
       ports.set(service, port);
@@ -123,12 +134,11 @@ export async function startServices(
         if ((await docker(['exec', name, ...image.ready])).code === 0) {
           break;
         }
-        const state = await docker(['inspect', '--format', '{{.State.Running}}', name]);
-        const stopped = state.stdout.trim() !== 'true';
-        if (stopped || Date.now() >= deadline) {
-          const logs = await docker(['logs', '--tail', '20', name]);
-          const reason = stopped ? 'stopped before it was ready' : `was not ready after ${timeout / 1000} s`;
-          throw new Error(`${label} ${reason}:\n${`${logs.stdout}${logs.stderr}`.trim()}`);
+        if (!(await isRunning())) {
+          throw await notReady('stopped before it was ready');
+        }
+        if (Date.now() >= deadline) {
+          throw await notReady(`was not ready after ${timeout / 1000} s`);
         }
         await new Promise((resolve) => setTimeout(resolve, pollMs));
       }

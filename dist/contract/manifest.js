@@ -3,6 +3,7 @@
  * and checked by the bd CLI and by every content source of the desktop app.
  */
 import { z } from 'zod';
+import { peakMemoryProblem, projectMemorySchema, projectServicesSchema } from './services.js';
 import { TICKET_TYPES, ticketSkillsSchema } from './ticket-meta.js';
 export const TRACKS = ['front', 'back'];
 /** A ticket id: its track and its order in the track, also the name of its branch and folder. */
@@ -48,6 +49,10 @@ export const manifestSchema = z
         /** Shown on the Projects screen (package.json bugDetective.project.difficulty). */
         difficulty: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
         stack: projectStackSchema.optional(),
+        /** The services the project's code needs (package.json bugDetective.project.services). */
+        services: projectServicesSchema.optional(),
+        /** A larger workspace than the default (package.json bugDetective.project.memory). */
+        memory: projectMemorySchema.optional(),
     }),
     version: z.string().regex(/^\d+\.\d+\.\d+$/),
     createdAt: z.string(),
@@ -61,6 +66,10 @@ export const manifestSchema = z
     .superRefine((manifest, ctx) => {
     const issue = (message) => ctx.addIssue({ code: 'custom', message });
     const { tickets, entries } = manifest;
+    const peak = peakMemoryProblem(manifest.project);
+    if (peak) {
+        issue(`project.memory: ${peak}`);
+    }
     if (tickets.total !== tickets.front + tickets.back) {
         issue(`tickets.total (${tickets.total}) must be front + back (${tickets.front + tickets.back})`);
     }

@@ -75,6 +75,49 @@ documentation (the skills section of the product requirements).
 Change `projects.json` through a pull request: the `catalog` check validates the file and every
 listed project before the merge.
 
+### Project services
+
+A project whose code needs a database declares it in `bugDetective.project.services` of the
+`package.json` on `qa`; `bd` copies the declaration into the manifest:
+
+```json
+"services": {
+  "db": {
+    "image": "postgres:17",
+    "memory": "256m",
+    "env": { "POSTGRES_PASSWORD": "shop", "POSTGRES_DB": "shop" },
+    "variables": { "DATABASE_URL": "postgres://postgres:shop@{{host}}:{{port}}/shop" }
+  }
+}
+```
+
+- `image` is a name from the list of allowed images (`SERVICE_IMAGES` in `src/contract/services.ts`),
+  today only `postgres:17`. The list pins each image by digest and knows its port, its unprivileged
+  user, its data paths and the command that tells when it is ready. A new image enters by pull
+  request to this repository.
+- `memory` is the container's limit, from `64m` to `1g` (default `256m`), written as a whole number
+  followed by `k`, `m` or `g`.
+- `env` is the environment of the service's own container.
+- `variables` is what the project's code reads. Whoever starts the service fills `{{host}}` and
+  `{{port}}`: the app with the service name on the project's internal network, `bd verify` with
+  `127.0.0.1` and a free port. The code, the QA tool and `db:reset` must read these variables and
+  never a fixed address. A name is upper-case, may not start with `BUGDETECTIVE_` and may not be
+  `PATH`, `HOME`, `NODE_OPTIONS`, `NODE_PATH`, `SHELL`, `USER` or `PWD`; two services may not define
+  the same one.
+- A service name is lower-case letters, digits and `-`, up to 20 characters; a project has at most
+  4 services.
+- `bugDetective.project.memory.workspace` asks for a larger workspace, from `1g` to `4g` (default
+  `3g`).
+- The memory peak may not pass 8 GB: the workspace, the services, a QA run (2 GB) and the services
+  of that run, all at the same time. The example above needs 5.5 GB.
+
+`bd validate` refuses a declaration outside these rules, naming the field. `bd verify` needs Docker
+for such a project: before every QA run it starts each service with its data in memory, without
+privileges and published on `127.0.0.1` only, passes the variables to `npm run qa`, and removes the
+containers afterwards, also when the run fails or is interrupted. Containers a crashed run left
+behind are removed by the next one. A catalog project that declares services needs `minAppVersion`
+1.2.0 or newer.
+
 ## The contract (`@bug-detective/catalog/contract`)
 
 Schemas and checks shared by the desktop app and `bd`: the catalog, the project manifest
@@ -128,15 +171,15 @@ pull request to this repository):
 Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clone of `main`). The
 `qa` branch has this package as a dev dependency, so `npx bd` works there.
 
-| Command                                                         | What it does                                                                                                                                                                                                                            |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bd build [--base main]`                                        | Regenerates every `tickets/<id>/gate1/` (the tests of `main` plus the regression test of every other ticket) and rebuilds each ticket branch as one commit: `main`, the ticket's `bug.patch`, its `gate1/` and its Jira card            |
-| `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass                                                                                       |
-| `bd validate [--base-ref origin/qa] [--offline]`                | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, the policy and the dependency rules hold, and the version is newer than the one on the base ref; prints one `ok`/`FAIL` line per check |
-| `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                               |
-| `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                                 |
-| `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                           |
-| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project, the order of the cards by level and the `minAppVersion` of projects with other ticket types (this repository's own check)                                                               |
+| Command                                                         | What it does                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bd build [--base main]`                                        | Regenerates every `tickets/<id>/gate1/` (the tests of `main` plus the regression test of every other ticket) and rebuilds each ticket branch as one commit: `main`, the ticket's `bug.patch`, its `gate1/` and its Jira card                                          |
+| `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass. A project with [services](#project-services) gets them started before each run and removed after it (needs Docker) |
+| `bd validate [--base-ref origin/qa] [--offline]`                | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, the policy and the dependency rules hold, and the version is newer than the one on the base ref; prints one `ok`/`FAIL` line per check                               |
+| `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                                                             |
+| `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                                                               |
+| `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                                                         |
+| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project, the order of the cards by level and the `minAppVersion` of projects with other ticket types or with services (this repository's own check)                                                                            |
 
 ## Publishing a project
 

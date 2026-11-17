@@ -7,7 +7,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitIn, resolveBranchRef } from './git.js';
+import { readProject } from './manifest.js';
 import { run } from './process.js';
+import { startServices, sweepVerifyServices } from './services.js';
 import { ticketIdsOf } from './tickets.js';
 /** The outcome of each gate: the result names the gate that failed or timed out (2 when passed). */
 export function gatesOf(result) {
@@ -21,7 +23,7 @@ export function npmInvocation(platform) {
     return platform === 'win32' ? { command: 'npm.cmd', shell: true } : { command: 'npm', shell: false };
 }
 /** The project's QA CLI: `npm run qa` in the qa folder, with a JSON result. */
-export const npmQa = async ({ qaDir, id, position, workspace }) => {
+export const npmQa = async ({ qaDir, id, position, workspace, env }) => {
     const out = join(await mkdtemp(join(tmpdir(), 'bd-qa-')), 'result.json');
     try {
         const args = [
@@ -43,6 +45,7 @@ export const npmQa = async ({ qaDir, id, position, workspace }) => {
         const result = await run(npm.command, npm.shell ? args.map((arg) => `"${arg}"`) : args, {
             cwd: qaDir,
             shell: npm.shell,
+            ...(env && { env: { ...process.env, ...env } }),
         });
         const json = await readFile(out, 'utf8').catch(() => {
             throw new Error(`${id}: the QA tool wrote no result (exit ${result.code}):\n${result.stdout}${result.stderr}`);
@@ -53,41 +56,72 @@ export const npmQa = async ({ qaDir, id, position, workspace }) => {
         await rm(join(out, '..'), { recursive: true, force: true });
     }
 };
-export async function verifyTickets({ qaDir, ids, runQa = npmQa, log = () => { }, }) {
+export async function verifyTickets({ qaDir, ids, runQa = npmQa, services = { start: startServices, sweep: sweepVerifyServices }, onInterrupt, log = () => { }, }) {
     const git = gitIn(qaDir);
+    const project = await readProject(qaDir);
+    const declared = Object.keys(project.services ?? {}).length > 0 ? project.services : undefined;
+    let active;
+    // Every QA run gets its own services, started just before it and removed right after, so no run
+    // sees the data of another.
+    const qa = async (args) => {
+        if (!declared) {
+            return runQa(args);
+        }
+        const running = await services.start(declared, { project: project.id });
+        active = running;
+        try {
+            return await runQa({ ...args, env: running.env });
+        }
+        finally {
+            active = undefined;
+            await running.stop();
+        }
+    };
+    const unregister = declared ? onInterrupt?.(async () => active?.stop()) : undefined;
+    if (declared) {
+        const swept = await services.sweep();
+        if (swept.length > 0) {
+            log(`Removed ${swept.length} service container(s) left by an earlier run`);
+        }
+    }
     const queue = await ticketIdsOf(git);
     const rows = [];
     const selected = ids ?? queue;
-    for (const [index, id] of selected.entries()) {
-        const position = queue.indexOf(id) + 1;
-        if (position === 0) {
-            throw new Error(`Unknown ticket: ${id}`);
+    try {
+        for (const [index, id] of selected.entries()) {
+            const position = queue.indexOf(id) + 1;
+            if (position === 0) {
+                throw new Error(`Unknown ticket: ${id}`);
+            }
+            log(`${id}: running QA (${index + 1}/${selected.length})…`);
+            const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
+            const workspace = join(scratch, id);
+            try {
+                await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
+                const buggyRun = await qa({ qaDir, id, position, workspace });
+                const buggy = gatesOf(buggyRun);
+                const applied = await gitIn(workspace)
+                    .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
+                    .then(() => true, () => false);
+                const fixedRun = applied ? await qa({ qaDir, id, position, workspace }) : undefined;
+                const fixed = fixedRun ? gatesOf(fixedRun) : 'patch-failed';
+                const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
+                const logs = [
+                    `--- buggy run\n${buggyRun.output ?? ''}`,
+                    `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
+                ].join('\n');
+                rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
+                const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
+                log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
+            }
+            finally {
+                await git.text('worktree', 'remove', '--force', workspace).catch(() => { });
+                await rm(scratch, { recursive: true, force: true });
+            }
         }
-        log(`${id}: running QA (${index + 1}/${selected.length})…`);
-        const scratch = await mkdtemp(join(tmpdir(), 'bd-verify-'));
-        const workspace = join(scratch, id);
-        try {
-            await git.text('worktree', 'add', '--quiet', '--detach', workspace, await resolveBranchRef(qaDir, id));
-            const buggyRun = await runQa({ qaDir, id, position, workspace });
-            const buggy = gatesOf(buggyRun);
-            const applied = await gitIn(workspace)
-                .text('apply', join(qaDir, 'tickets', id, 'reference.patch'))
-                .then(() => true, () => false);
-            const fixedRun = applied ? await runQa({ qaDir, id, position, workspace }) : undefined;
-            const fixed = fixedRun ? gatesOf(fixedRun) : 'patch-failed';
-            const ok = buggy.join() === 'pass,fail' && fixed !== 'patch-failed' && fixed.join() === 'pass,pass';
-            const logs = [
-                `--- buggy run\n${buggyRun.output ?? ''}`,
-                `--- fixed run\n${fixedRun?.output ?? 'reference.patch does not apply'}`,
-            ].join('\n');
-            rows.push({ id, buggy, fixed, ok, ...(!ok && { logs }) });
-            const fixedText = fixed === 'patch-failed' ? 'patch-failed' : `(${fixed.join(', ')})`;
-            log(`${id}: buggy=(${buggy.join(', ')}) fixed=${fixedText} ${ok ? 'OK' : 'UNEXPECTED'}`);
-        }
-        finally {
-            await git.text('worktree', 'remove', '--force', workspace).catch(() => { });
-            await rm(scratch, { recursive: true, force: true });
-        }
+    }
+    finally {
+        unregister?.();
     }
     return { rows, ok: rows.every((row) => row.ok) };
 }
