@@ -61,11 +61,11 @@ describe('bd catalog-check', () => {
 
 describe('bd catalog-check, the order and the app version', () => {
   type Level = 'beginner' | 'intermediate' | 'advanced';
-  const manifests: Record<string, { difficulty?: Level; types?: (string | undefined)[] }> = {};
+  const manifests: Record<string, { difficulty?: Level; types?: (string | undefined)[]; services?: object }> = {};
   const validate = async ({ project }: ValidateRemoteOptions) => {
     const id = project ?? '';
     return {
-      project: { id, name: id, difficulty: manifests[id]?.difficulty },
+      project: { id, name: id, difficulty: manifests[id]?.difficulty, services: manifests[id]?.services },
       entries: (manifests[id]?.types ?? [undefined]).map((type) => ({ type })),
     } as never;
   };
@@ -115,6 +115,25 @@ describe('bd catalog-check, the order and the app version', () => {
     await expect(
       check([project('a', { starter: true }), project('b', { minAppVersion: '1.1.0' })]),
     ).resolves.toBeUndefined();
+  });
+
+  it('requires minAppVersion 1.2.0 of a project that declares services', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    manifests.b.services = { db: { image: 'postgres:17' } };
+    const message = 'b: declares services and needs minAppVersion >= 1.2.0';
+    await expect(check([project('a', { starter: true }), project('b')])).rejects.toThrow(message);
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.1.0' })])).rejects.toThrow(
+      message,
+    );
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.2.0' })]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('asks no app version of a project with an empty services declaration', async () => {
+    levels({ a: 'beginner' });
+    manifests.a.services = {};
+    await expect(check([project('a', { starter: true })])).resolves.toBeUndefined();
   });
 
   it('asks nothing of a project with fix tickets only', async () => {

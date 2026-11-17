@@ -1,6 +1,6 @@
 /** bd catalog-check: the catalog's own check, on every pull request and every day. */
 import { readFile } from 'node:fs/promises';
-import { TICKET_TYPES_MIN_APP_VERSION, parseCatalog } from '../contract/catalog.ts';
+import { SERVICES_MIN_APP_VERSION, TICKET_TYPES_MIN_APP_VERSION, parseCatalog } from '../contract/catalog.ts';
 import { compareVersions } from '../contract/manifest.ts';
 import type { ProjectManifest } from '../contract/manifest.ts';
 import { validateRemote } from './remote.ts';
@@ -49,6 +49,12 @@ export async function checkCatalog({
         problems.push(
           `${project.id}: has tickets of other types and needs minAppVersion >= ${TICKET_TYPES_MIN_APP_VERSION}`,
         );
+      }
+      const declaresServices = Object.keys(manifest.project.services ?? {}).length > 0;
+      const runsServices =
+        project.minAppVersion !== undefined && compareVersions(project.minAppVersion, SERVICES_MIN_APP_VERSION) >= 0;
+      if (declaresServices && !runsServices) {
+        problems.push(`${project.id}: declares services and needs minAppVersion >= ${SERVICES_MIN_APP_VERSION}`);
       }
       const level = manifest.project.difficulty;
       if (project.starter || level === undefined) {
