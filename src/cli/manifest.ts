@@ -3,7 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { assertNoCaseCollisions, safeRelativePath, treeDigest } from '../contract/archive.ts';
 import type { ArchiveFile } from '../contract/archive.ts';
-import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.ts';
+import {
+  PACKAGE_EXCLUDED,
+  PROJECT_ID,
+  SUPPORTED_FORMAT_VERSION,
+  parseManifest,
+  projectStackSchema,
+} from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
 import { projectContentOf } from '../contract/project-files.ts';
 import { projectServicesProblems } from '../contract/services.ts';
@@ -45,6 +51,11 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
   const project = json.bugDetective?.project;
   if (typeof project?.id !== 'string' || typeof project.name !== 'string') {
     throw new Error(`${qaDir}/package.json has no bugDetective.project { id, name }`);
+  }
+  if (!PROJECT_ID.test(project.id)) {
+    throw new Error(
+      `${qaDir}/package.json: bugDetective.project.id must be lower-case letters, digits and -, starting with a letter, up to 40 characters`,
+    );
   }
   const { difficulty } = project;
   if (difficulty !== undefined && !DIFFICULTIES.includes(difficulty as ProjectInfo['difficulty'] & string)) {

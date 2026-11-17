@@ -197,6 +197,19 @@ describe('buildManifest', () => {
     });
   });
 
+  it.each(['Shop', 'shop two', '-shop', 'shop;rm', 'a'.repeat(41)])(
+    'refuses the project id %j, naming the rule',
+    async (id) => {
+      const file = join(repo.qaDir, 'package.json');
+      const pkg = JSON.parse(await readFile(file, 'utf8'));
+      pkg.bugDetective.project.id = id;
+      await writeFile(file, JSON.stringify(pkg));
+      await expect(build()).rejects.toThrow(
+        /package\.json: bugDetective\.project\.id must be lower-case letters, digits and -, starting with a letter, up to 40 characters/,
+      );
+    },
+  );
+
   it('has no stack when package.json gives none', async () => {
     expect((await build()).project).not.toHaveProperty('stack');
   });
