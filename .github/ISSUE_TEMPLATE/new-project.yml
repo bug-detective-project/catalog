@@ -42,7 +42,7 @@ body:
     id: skills
     attributes:
       label: Skills the player practices
-      description: The 1 to 5 `project.skills` of `story.en.json`, one per line.
+      description: The 1 to 12 `project.skills` of `story.en.json`, one per line. The card shows the first 5.
     validations:
       required: true
   - type: checkboxes
