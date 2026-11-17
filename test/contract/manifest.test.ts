@@ -64,6 +64,25 @@ describe('project manifest', () => {
     expect(() => parseManifest(manifest({ entries }))).toThrow(ContentVerificationError);
   });
 
+  it('keeps the services and the memory of the project', () => {
+    const services = { db: { image: 'postgres:17', variables: { DATABASE_URL: 'pg://{{host}}:{{port}}' } } };
+    const project = { id: 'demo', name: 'Demo', services, memory: { workspace: '4g' } };
+    const parsed = parseManifest(manifest({ project }), 'demo');
+    expect(parsed.project.services).toEqual(services);
+    expect(parsed.project.memory).toEqual({ workspace: '4g' });
+  });
+
+  it('rejects a service image off the list', () => {
+    const project = { id: 'demo', name: 'Demo', services: { db: { image: 'mysql:8' } } };
+    expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/image/);
+  });
+
+  it('rejects a memory peak above the limit', () => {
+    const services = Object.fromEntries(['a', 'b', 'c', 'd'].map((n) => [n, { image: 'postgres:17', memory: '1g' }]));
+    const project = { id: 'demo', name: 'Demo', services, memory: { workspace: '4g' } };
+    expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/peak is 14 GB/);
+  });
+
   it('rejects a manifest of another project', () => {
     expect(() => parseManifest(manifest(), 'other')).toThrow(/another project/);
   });

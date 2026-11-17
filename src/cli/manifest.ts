@@ -6,6 +6,8 @@ import type { ArchiveFile } from '../contract/archive.ts';
 import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
 import { projectContentOf } from '../contract/project-files.ts';
+import { projectServicesProblems } from '../contract/services.ts';
+import type { ProjectMemory, ProjectServices } from '../contract/services.ts';
 import { ticketMetaOf } from '../contract/ticket-meta.ts';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.ts';
 import { ticketQueue, trackedTicketFiles } from './tickets.ts';
@@ -17,11 +19,24 @@ export interface ProjectInfo {
   name: string;
   difficulty?: (typeof DIFFICULTIES)[number];
   stack?: ProjectManifest['project']['stack'];
+  services?: ProjectServices;
+  memory?: ProjectMemory;
 }
 
 /** bugDetective.project of the qa folder's package.json. */
 export async function readProject(qaDir: string): Promise<ProjectInfo> {
-  let json: { bugDetective?: { project?: { id?: unknown; name?: unknown; difficulty?: unknown; stack?: unknown } } };
+  let json: {
+    bugDetective?: {
+      project?: {
+        id?: unknown;
+        name?: unknown;
+        difficulty?: unknown;
+        stack?: unknown;
+        services?: unknown;
+        memory?: unknown;
+      };
+    };
+  };
   try {
     json = JSON.parse(await readFile(join(qaDir, 'package.json'), 'utf8'));
   } catch {
@@ -46,11 +61,18 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
     }
     stack = parsed.data;
   }
+  const { services, memory } = project;
+  const problem = projectServicesProblems({ services, memory })[0];
+  if (problem) {
+    throw new Error(`${qaDir}/package.json: bugDetective.project.${problem}`);
+  }
   return {
     id: project.id,
     name: project.name,
     ...(difficulty !== undefined && { difficulty: difficulty as ProjectInfo['difficulty'] }),
     ...(stack !== undefined && { stack }),
+    ...(services !== undefined && { services: services as ProjectServices }),
+    ...(memory !== undefined && { memory: memory as ProjectMemory }),
   };
 }
 
