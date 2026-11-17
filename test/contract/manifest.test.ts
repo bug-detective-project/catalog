@@ -77,10 +77,11 @@ describe('project manifest', () => {
     expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/image/);
   });
 
-  it('rejects a malformed service memory, naming the field', () => {
+  it('rejects a malformed service memory as an invalid manifest, not with a crash', () => {
     const project = { id: 'demo', name: 'Demo', services: { db: { image: 'postgres:17', memory: 'lots' } } };
-    expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/memory/);
-    expect(() => parseManifest(manifest({ project }), 'demo')).not.toThrow(/is not a memory size/);
+    expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(
+      'Invalid project manifest: must be a whole number followed by k, m or g, like 256m',
+    );
   });
 
   it('rejects a memory peak above the limit', () => {
