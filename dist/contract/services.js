@@ -77,6 +77,11 @@ const projectServiceSchema = z
     env: z.record(z.string(), z.string()).optional(),
     /** What the project's code reads, with {{host}} and {{port}} filled by whoever starts the service. */
     variables: z.record(z.string(), z.string()).optional(),
+    /**
+     * The app also publishes the service's port on the player's computer, on 127.0.0.1 only and
+     * on a free port, for the player's own database tools. The code never uses it.
+     */
+    publish: z.boolean().optional(),
 })
     .strict()
     .superRefine((service, ctx) => {

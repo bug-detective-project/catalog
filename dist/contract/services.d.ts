@@ -50,6 +50,7 @@ declare const projectServiceSchema: z.ZodObject<{
     memory: z.ZodOptional<z.ZodString>;
     env: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    publish: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strict>;
 export type ProjectService = z.infer<typeof projectServiceSchema>;
 export type ProjectServices = Record<string, ProjectService>;
@@ -58,6 +59,7 @@ export declare const projectServicesSchema: z.ZodRecord<z.ZodString, z.ZodObject
     memory: z.ZodOptional<z.ZodString>;
     env: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    publish: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strict>>;
 /** A project may ask for a larger workspace (package.json `bugDetective.project.memory`). */
 export declare const projectMemorySchema: z.ZodObject<{

@@ -40,6 +40,17 @@ describe('a project services declaration', () => {
     expect(projectServicesProblems({ services })).toEqual([]);
   });
 
+  it('accepts a service that asks for its port to be published on the computer', () => {
+    expect(projectServicesProblems({ services: { db: { ...db, publish: true } } })).toEqual([]);
+    expect(projectServicesProblems({ services: { db: { ...db, publish: false } } })).toEqual([]);
+  });
+
+  it('refuses a publish that is not true or false, naming the field', () => {
+    const problems = projectServicesProblems({ services: { db: { ...db, publish: '5432:5432' } } });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^services\.db\.publish: /);
+  });
+
   it('accepts a project without services or memory', () => {
     expect(projectServicesProblems({})).toEqual([]);
   });
