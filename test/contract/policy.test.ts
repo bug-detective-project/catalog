@@ -68,6 +68,12 @@ describe('vscodeProblems', () => {
     expect(vscodeProblems(files)).toEqual([]);
   });
 
+  it('allows the database client and its PostgreSQL driver, for looking at the data of a service', () => {
+    expect(vscodeProblems([extensions(['mtxr.sqltools', 'mtxr.sqltools-driver-pg'])])).toEqual([]);
+    // A driver of a database that is not on the list of service images is not allowed yet.
+    expect(vscodeProblems([extensions(['mtxr.sqltools-driver-mysql'])])).toHaveLength(1);
+  });
+
   it('refuses an extension outside the list and says where the list lives', () => {
     const problems = vscodeProblems([extensions(['dbaeumer.vscode-eslint', 'evil.helper'])]);
     expect(problems).toHaveLength(1);

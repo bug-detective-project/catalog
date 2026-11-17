@@ -104,6 +104,9 @@ A project whose code needs a database declares it in `bugDetective.project.servi
   never a fixed address. A name is upper-case, may not start with `BUGDETECTIVE_` and may not be
   `PATH`, `HOME`, `NODE_OPTIONS`, `NODE_PATH`, `SHELL`, `USER` or `PWD`; two services may not define
   the same one.
+- `publish: true` (optional) asks the app to also publish the service's port on the player's
+  computer, on `127.0.0.1` only and on a free port, for the player's own database tools. The
+  project's code never uses that port.
 - A service name is lower-case letters, digits and `-`, up to 20 characters; a project has at most
   4 services.
 - `bugDetective.project.memory.workspace` asks for a larger workspace, from `1g` to `4g` (default
@@ -129,8 +132,8 @@ as `CON` or `aux.ts`, a trailing dot or space) or two paths that differ only by 
 because players extract the packages on their disk.
 
 It also holds the project policy (`policy.ts`), applied by `bd validate` to every publication:
-the VS Code extensions a project may recommend (`ALLOWED_VSCODE_EXTENSIONS`: ESLint, Prettier and
-Vitest for now; UI extensions run on the player's PC, outside the workspace), the files allowed in
+the VS Code extensions a project may recommend (`ALLOWED_VSCODE_EXTENSIONS`: ESLint, Prettier,
+Vitest and, for looking at the data of a project's services, SQLTools with its PostgreSQL driver; UI extensions run on the player's PC, outside the workspace), the files allowed in
 `.vscode/` (`settings.json`, `extensions.json`, `launch.json`), checked on `main` and on every
 ticket branch, and the commands a ticket, hint, solution, review or story text must never ask the
 player to run (`DANGEROUS_TEXT_PATTERNS`: downloads piped into a shell, PowerShell, `cmd /c`,

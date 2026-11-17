@@ -10,6 +10,10 @@ export const ALLOWED_VSCODE_EXTENSIONS = [
     'dbaeumer.vscode-eslint',
     'esbenp.prettier-vscode',
     'vitest.explorer',
+    // A database client for the services of a project (SQLTools, MIT) and its driver for each
+    // database on the list of service images.
+    'mtxr.sqltools',
+    'mtxr.sqltools-driver-pg',
 ];
 /** Files a project may ship in .vscode/. */
 export const ALLOWED_VSCODE_FILES = ['settings.json', 'extensions.json', 'launch.json'];
