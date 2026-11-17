@@ -58,3 +58,68 @@ describe('bd catalog-check', () => {
     expect((error as Error).message).not.toMatch(/\ba:|\bc:/);
   });
 });
+
+describe('bd catalog-check, the order and the app version', () => {
+  type Level = 'beginner' | 'intermediate' | 'advanced';
+  const manifests: Record<string, { difficulty?: Level; types?: (string | undefined)[] }> = {};
+  const validate = async ({ project }: ValidateRemoteOptions) => {
+    const id = project ?? '';
+    return {
+      project: { id, name: id, difficulty: manifests[id]?.difficulty },
+      entries: (manifests[id]?.types ?? [undefined]).map((type) => ({ type })),
+    } as never;
+  };
+  const check = (projects: unknown[]) =>
+    writeFile(file, JSON.stringify({ projects })).then(() => checkCatalog({ file, validate }));
+  const levels = (list: Record<string, Level | undefined>) => {
+    for (const key of Object.keys(manifests)) delete manifests[key];
+    for (const [id, difficulty] of Object.entries(list)) manifests[id] = { difficulty };
+  };
+
+  it('accepts the starter first and then levels that never go down', async () => {
+    levels({ a: 'advanced', b: 'beginner', c: 'beginner', d: 'intermediate', e: 'advanced' });
+    await expect(
+      check([project('a', { starter: true }), project('b'), project('c'), project('d'), project('e')]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a project listed after a higher level, naming it', async () => {
+    levels({ a: 'beginner', b: 'advanced', c: 'intermediate' });
+    await expect(check([project('a', { starter: true }), project('b'), project('c')])).rejects.toThrow(
+      'c: listed out of level order (intermediate after advanced)',
+    );
+  });
+
+  it('lets a project without a level keep the order', async () => {
+    levels({ a: 'beginner', b: 'intermediate', c: undefined, d: 'intermediate' });
+    await expect(
+      check([project('a', { starter: true }), project('b'), project('c'), project('d')]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('refuses a starter that is not the first project', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    await expect(check([project('a'), project('b', { starter: true })])).rejects.toThrow(
+      'b: the starter must be the first project',
+    );
+  });
+
+  it('requires minAppVersion 1.1.0 of a project with tickets of other types', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    manifests.b.types = ['fix', 'build'];
+    const message = 'b: has tickets of other types and needs minAppVersion >= 1.1.0';
+    await expect(check([project('a', { starter: true }), project('b')])).rejects.toThrow(message);
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.0.0' })])).rejects.toThrow(
+      message,
+    );
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.1.0' })]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('asks nothing of a project with fix tickets only', async () => {
+    levels({ a: 'beginner' });
+    manifests.a.types = ['fix', undefined];
+    await expect(check([project('a', { starter: true })])).resolves.toBeUndefined();
+  });
+});
