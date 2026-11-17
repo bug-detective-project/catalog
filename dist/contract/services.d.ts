@@ -74,7 +74,7 @@ export interface ProjectResources {
  * a QA run has its own container and its own copy of every service.
  */
 export declare function peakMemory(project: ProjectResources): number;
-/** The problem of a peak above the limit, or undefined. */
+/** The problem of a peak above the limit; undefined when it fits or when a size is malformed. */
 export declare function peakMemoryProblem(project: ProjectResources): string | undefined;
 /**
  * What is wrong with a project's `services` and `memory`, one line per problem as `<field>: <reason>`;

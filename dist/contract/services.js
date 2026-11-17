@@ -141,9 +141,16 @@ export function peakMemory(project) {
     return memoryBytes(project.memory?.workspace ?? WORKSPACE_MEMORY_DEFAULT) + memoryBytes(QA_MEMORY) + 2 * services;
 }
 const gigabytes = (bytes) => `${Number((bytes / UNITS.g).toFixed(2))} GB`;
-/** The problem of a peak above the limit, or undefined. */
+/** The problem of a peak above the limit; undefined when it fits or when a size is malformed. */
 export function peakMemoryProblem(project) {
-    const peak = peakMemory(project);
+    let peak;
+    try {
+        peak = peakMemory(project);
+    }
+    catch {
+        // A malformed size is reported on its own field; there is no peak to add up.
+        return undefined;
+    }
     const limit = memoryBytes(PEAK_MEMORY_MAX);
     return peak > limit
         ? `the peak is ${gigabytes(peak)} (workspace, services, QA and its services at the same time) and the limit is ${gigabytes(limit)}`

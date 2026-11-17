@@ -77,6 +77,12 @@ describe('project manifest', () => {
     expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/image/);
   });
 
+  it('rejects a malformed service memory, naming the field', () => {
+    const project = { id: 'demo', name: 'Demo', services: { db: { image: 'postgres:17', memory: 'lots' } } };
+    expect(() => parseManifest(manifest({ project }), 'demo')).toThrow(/memory/);
+    expect(() => parseManifest(manifest({ project }), 'demo')).not.toThrow(/is not a memory size/);
+  });
+
   it('rejects a memory peak above the limit', () => {
     const services = Object.fromEntries(['a', 'b', 'c', 'd'].map((n) => [n, { image: 'postgres:17', memory: '1g' }]));
     const project = { id: 'demo', name: 'Demo', services, memory: { workspace: '4g' } };
