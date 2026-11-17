@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { textFile } from '../../src/contract/archive.ts';
 import { projectContentOf, qaToolFiles } from '../../src/contract/project-files.ts';
-import { parseProjectStory } from '../../src/contract/story.ts';
+import { PROJECT_SKILLS_MAX, parseProjectStory } from '../../src/contract/story.ts';
 
 const message = { subject: 'Subject', body: 'Body' };
 export const story = {
@@ -75,15 +75,22 @@ describe('files of the qa branch', () => {
       textFile('story.pt.json', JSON.stringify({ ...story, project: { ...story.project, ...(pt && { skills: pt }) } })),
     ];
 
-    it('accepts 1 to 5 skills, in both languages', () => {
+    it('accepts 1 to 12 skills, in both languages', () => {
       expect(projectContentOf(files(['Async and state'], ['Assincronia e estado'])).story.pt.project.skills).toEqual([
         'Assincronia e estado',
       ]);
       expect(projectContentOf(files(undefined, undefined)).story.en.project.skills).toBeUndefined();
     });
 
-    it('refuses no skill, more than 5 or an empty one', () => {
-      for (const skills of [[], ['a', 'b', 'c', 'd', 'e', 'f'], ['']]) {
+    it('accepts the maximum of 12 skills', () => {
+      const twelve = Array.from({ length: PROJECT_SKILLS_MAX }, (_, index) => `Skill ${index + 1}`);
+      expect(PROJECT_SKILLS_MAX).toBe(12);
+      expect(projectContentOf(files(twelve, twelve)).story.en.project.skills).toHaveLength(12);
+    });
+
+    it('refuses no skill, more than 12 or an empty one', () => {
+      const thirteen = Array.from({ length: 13 }, (_, index) => `Skill ${index + 1}`);
+      for (const skills of [[], thirteen, ['']]) {
         expect(() => parseProjectStory({ ...story, project: { ...story.project, skills } }, 'story.en.json')).toThrow(
           /skills/,
         );
