@@ -3,6 +3,7 @@
  * and checked by the bd CLI and by every content source of the desktop app.
  */
 import { z } from 'zod';
+import { TICKET_TYPES, ticketSkillsSchema } from './ticket-meta.js';
 export const TRACKS = ['front', 'back'];
 /** A ticket id: its track and its order in the track, also the name of its branch and folder. */
 export const TICKET_ID = /^(front|back)-([1-9][0-9]?)$/;
@@ -26,6 +27,10 @@ export const ticketEntrySchema = z.object({
         /** treeDigest of tickets/<id>/ without PACKAGE_EXCLUDED. */
         digest,
     }),
+    /** From tickets/<id>/ticket.json; absent means a fix ticket, one side, no skills. */
+    type: z.enum(TICKET_TYPES).optional(),
+    bothSides: z.boolean().optional(),
+    skills: ticketSkillsSchema.optional(),
 });
 const stackValue = z.string().min(1).max(60);
 /** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */

@@ -27,6 +27,21 @@ export declare const ticketEntrySchema: z.ZodObject<{
         files: z.ZodNumber;
         digest: z.ZodString;
     }, z.core.$strip>;
+    type: z.ZodOptional<z.ZodEnum<{
+        build: "build";
+        complete: "complete";
+        fix: "fix";
+        investigate: "investigate";
+        optimize: "optimize";
+        refactor: "refactor";
+        test: "test";
+        upgrade: "upgrade";
+    }>>;
+    bothSides: z.ZodOptional<z.ZodBoolean>;
+    skills: z.ZodOptional<z.ZodObject<{
+        en: z.ZodArray<z.ZodString>;
+        pt: z.ZodArray<z.ZodString>;
+    }, z.core.$strict>>;
 }, z.core.$strip>;
 /** The project's technologies (package.json bugDetective.project.stack), shown in the project brief. */
 export declare const projectStackSchema: z.ZodObject<{
@@ -76,6 +91,21 @@ export declare const manifestSchema: z.ZodObject<{
             files: z.ZodNumber;
             digest: z.ZodString;
         }, z.core.$strip>;
+        type: z.ZodOptional<z.ZodEnum<{
+            build: "build";
+            complete: "complete";
+            fix: "fix";
+            investigate: "investigate";
+            optimize: "optimize";
+            refactor: "refactor";
+            test: "test";
+            upgrade: "upgrade";
+        }>>;
+        bothSides: z.ZodOptional<z.ZodBoolean>;
+        skills: z.ZodOptional<z.ZodObject<{
+            en: z.ZodArray<z.ZodString>;
+            pt: z.ZodArray<z.ZodString>;
+        }, z.core.$strict>>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export type TicketEntry = z.infer<typeof ticketEntrySchema>;

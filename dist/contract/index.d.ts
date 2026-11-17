@@ -6,4 +6,5 @@ export * from './policy.ts';
 export * from './project-files.ts';
 export * from './review.ts';
 export * from './story.ts';
+export * from './ticket-meta.ts';
 export * from './verify.ts';

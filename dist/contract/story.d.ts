@@ -5,6 +5,8 @@
 import { z } from 'zod';
 export declare const LANGUAGES: readonly ['en', 'pt'];
 export type Language = (typeof LANGUAGES)[number];
+/** How many skills a project may list: free text, written with the words of the Bug Detective documentation. */
+export declare const PROJECT_SKILLS_MAX = 12;
 export declare const projectStorySchema: z.ZodObject<{
     client: z.ZodObject<{
         name: z.ZodString;

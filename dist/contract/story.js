@@ -5,6 +5,8 @@
 import { z } from 'zod';
 import { TICKET_ID } from './manifest.js';
 export const LANGUAGES = ['en', 'pt'];
+/** How many skills a project may list: free text, written with the words of the Bug Detective documentation. */
+export const PROJECT_SKILLS_MAX = 12;
 const text = z.string().min(1);
 const message = z.object({ subject: text, body: text });
 export const projectStorySchema = z.object({
@@ -18,8 +20,8 @@ export const projectStorySchema = z.object({
         name: text,
         about: text,
         stack: text,
-        /** What the player practices in this project (1 to 5, the same count in every language). */
-        skills: z.array(z.string().min(1).max(60)).min(1).max(5).optional(),
+        /** What the player practices in this project (1 to PROJECT_SKILLS_MAX, the same count in every language); the card shows the first ones. */
+        skills: z.array(z.string().min(1).max(60)).min(1).max(PROJECT_SKILLS_MAX).optional(),
     }),
     messages: z.object({
         welcome: message,
