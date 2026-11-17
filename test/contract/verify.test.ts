@@ -31,6 +31,26 @@ describe('verification against the manifest', () => {
     expect(() => verifyCode(entry, [textFile('app.ts', 'Bug\n')])).toThrow(/front-1/);
   });
 
+  it('refuses an entry whose type, mark or skills are not what the ticket.json of its package says', () => {
+    const withMeta = [...packageFiles, textFile('ticket.json', '{"type":"build","bothSides":true}\n')];
+    const described: TicketEntry = {
+      ...entry,
+      package: { path: 'tickets/front-1', files: 3, digest: treeDigest(withMeta) },
+      type: 'build',
+      bothSides: true,
+    };
+    expect(verifyPackage(described, withMeta)).toBe(withMeta);
+    for (const tampered of [
+      { ...described, type: 'fix' as const },
+      { ...described, bothSides: undefined },
+      { ...described, skills: { en: ['A'], pt: ['A'] } },
+    ]) {
+      expect(() => verifyPackage(tampered, withMeta)).toThrow(/front-1: the ticket.json does not match the manifest/);
+    }
+    // A package without the file describes a plain fix ticket.
+    expect(() => verifyPackage({ ...entry, type: 'optimize' }, packageFiles)).toThrow(ContentVerificationError);
+  });
+
   it('takes a ticket package out of the qa files, without the tickets/<id>/ prefix or bug.patch', () => {
     const qaFiles = [
       textFile('run.ts', 'cli\n'),

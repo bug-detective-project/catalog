@@ -3,6 +3,7 @@
  * before these pass.
  */
 import { assertNoCaseCollisions, treeDigest } from './archive.js';
+import { ticketMetaOf, ticketMetaSchema } from './ticket-meta.js';
 import { ContentVerificationError, PACKAGE_EXCLUDED } from './manifest.js';
 /** The publication is not usable (a ticket commit or tag is missing, or it is older than allowed). */
 export class IncompletePublicationError extends ContentVerificationError {
@@ -39,6 +40,12 @@ export function verifyPackage(entry, packageFiles) {
     assertNoCaseCollisions(packageFiles);
     if (packageFiles.length !== entry.package.files || treeDigest(packageFiles) !== entry.package.digest) {
         throw new ContentVerificationError(`Ticket ${entry.id}: the package does not match the manifest`);
+    }
+    // The entry's type, mark and skills are a copy of the package's ticket.json: a manifest cannot say otherwise.
+    const { type, bothSides, skills } = entry;
+    const described = JSON.stringify(ticketMetaSchema.parse({ type, bothSides, skills }));
+    if (described !== JSON.stringify(ticketMetaSchema.parse(ticketMetaOf(packageFiles, entry.id)))) {
+        throw new ContentVerificationError(`Ticket ${entry.id}: the ticket.json does not match the manifest`);
     }
     return packageFiles;
 }
