@@ -43,6 +43,27 @@ describe('project manifest', () => {
     expect(parseManifest(manifest(), 'supportdesk').tickets.total).toBe(3);
   });
 
+  it('keeps the type, the both-sides mark and the skills of an entry', () => {
+    const skills = { en: ['Server performance'], pt: ['Desempenho no servidor'] };
+    const meta = { type: 'optimize', bothSides: true, skills };
+    const parsed = parseManifest(
+      manifest({ entries: [{ ...entry('front', 1), ...meta }, entry('front', 2), entry('back', 1)] }),
+    );
+    expect(parsed.entries[0]).toMatchObject(meta);
+  });
+
+  it('leaves an entry without ticket metadata as it is', () => {
+    const [first] = parseManifest(manifest()).entries;
+    expect(first).not.toHaveProperty('type');
+    expect(first).not.toHaveProperty('bothSides');
+    expect(first).not.toHaveProperty('skills');
+  });
+
+  it('rejects an unknown ticket type', () => {
+    const entries = [{ ...entry('front', 1), type: 'bug' }, entry('front', 2), entry('back', 1)];
+    expect(() => parseManifest(manifest({ entries }))).toThrow(ContentVerificationError);
+  });
+
   it('rejects a manifest of another project', () => {
     expect(() => parseManifest(manifest(), 'other')).toThrow(/another project/);
   });

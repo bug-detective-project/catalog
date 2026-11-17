@@ -3,6 +3,7 @@
  * and checked by the bd CLI and by every content source of the desktop app.
  */
 import { z } from 'zod';
+import { TICKET_TYPES, ticketSkillsSchema } from './ticket-meta.ts';
 
 export const TRACKS = ['front', 'back'] as const;
 export type Track = (typeof TRACKS)[number];
@@ -32,6 +33,10 @@ export const ticketEntrySchema = z.object({
     /** treeDigest of tickets/<id>/ without PACKAGE_EXCLUDED. */
     digest,
   }),
+  /** From tickets/<id>/ticket.json; absent means a fix ticket, one side, no skills. */
+  type: z.enum(TICKET_TYPES).optional(),
+  bothSides: z.boolean().optional(),
+  skills: ticketSkillsSchema.optional(),
 });
 
 const stackValue = z.string().min(1).max(60);
