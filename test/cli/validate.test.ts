@@ -62,6 +62,15 @@ describe('bd validate', () => {
     );
   });
 
+  it('refuses an invalid ticket.json, naming the file', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'ticket.json'), '{"skills":{"en":["A","B"],"pt":["A"]}}\n');
+    repo.git(repo.qaDir, 'add', 'tickets/front-1/ticket.json');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Describe front-1');
+    await expect(validateLocal({ qaDir: repo.qaDir })).rejects.toThrow(
+      /Invalid tickets\/front-1\/ticket\.json: skills/,
+    );
+  });
+
   it('refuses a manifest whose ticket does not match, naming the ticket', async () => {
     const file = join(repo.qaDir, 'manifest.json');
     const manifest = JSON.parse(await readFile(file, 'utf8'));

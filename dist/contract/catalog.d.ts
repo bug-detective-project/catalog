@@ -5,6 +5,8 @@
 import { z } from 'zod';
 /** Every project lives in the organization: the catalog never points outside it (no repojacking, no owner publishing on their own). */
 export declare const PROJECT_OWNER = "bug-detective-project";
+/** The first app version that knows ticket types: a project with a ticket that is not a fix needs at least it. */
+export declare const TICKET_TYPES_MIN_APP_VERSION = "1.1.0";
 export declare const catalogProjectSchema: z.ZodObject<{
     id: z.ZodString;
     repository: z.ZodString;

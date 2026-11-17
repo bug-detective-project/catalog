@@ -1,15 +1,45 @@
 /** bd catalog-check: the catalog's own check, on every pull request and every day. */
 import { readFile } from 'node:fs/promises';
-import { parseCatalog } from '../contract/catalog.js';
+import { TICKET_TYPES_MIN_APP_VERSION, parseCatalog } from '../contract/catalog.js';
+import { compareVersions } from '../contract/manifest.js';
 import { validateRemote } from './remote.js';
-/** Validates projects.json, then every listed project as players download it; reports every broken one. */
+const LEVELS = ['beginner', 'intermediate', 'advanced'];
+/**
+ * Validates projects.json, then every listed project as players download it; reports every broken
+ * one. Also checks the order of the cards (the starter, then levels that never go down) and that a
+ * project with ticket types other than fix asks for an app that knows them.
+ */
 export async function checkCatalog({ file, validate = validateRemote, log = () => { }, }) {
     const catalog = parseCatalog(JSON.parse(await readFile(file, 'utf8')));
     const problems = [];
+    const [first] = catalog.projects;
+    const starter = catalog.projects.find((project) => project.starter);
+    if (first.id !== starter.id) {
+        problems.push(`${starter.id}: the starter must be the first project`);
+    }
+    // After the starter, the cards go from beginner to advanced; a project without a level keeps the level before it.
+    let previous;
     for (const project of catalog.projects) {
         try {
             const manifest = await validate({ repository: project.repository, ref: project.qaRef, project: project.id });
             log(`${project.id}: ${manifest ? `${manifest.version}, ` : ''}valid`);
+            if (!manifest) {
+                continue;
+            }
+            const otherTypes = manifest.entries.some((entry) => entry.type !== undefined && entry.type !== 'fix');
+            const supported = project.minAppVersion !== undefined &&
+                compareVersions(project.minAppVersion, TICKET_TYPES_MIN_APP_VERSION) >= 0;
+            if (otherTypes && !supported) {
+                problems.push(`${project.id}: has tickets of other types and needs minAppVersion >= ${TICKET_TYPES_MIN_APP_VERSION}`);
+            }
+            const level = manifest.project.difficulty;
+            if (project.starter || level === undefined) {
+                continue;
+            }
+            if (previous !== undefined && LEVELS.indexOf(level) < LEVELS.indexOf(previous)) {
+                problems.push(`${project.id}: listed out of level order (${level} after ${previous})`);
+            }
+            previous = level;
         }
         catch (error) {
             problems.push(`${project.id}: ${error.message}`);

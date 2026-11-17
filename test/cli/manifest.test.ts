@@ -34,6 +34,36 @@ describe('buildManifest', () => {
     expect(manifest.entries[0].package).toMatchObject({ path: 'tickets/front-1', files: 11 });
   });
 
+  it('copies ticket.json into the entry of its ticket, and only of that one', async () => {
+    const meta = {
+      type: 'build',
+      bothSides: true,
+      skills: { en: ['Building components'], pt: ['Criação de componentes'] },
+    };
+    const before = await build();
+    await writeFile(join(repo.qaDir, 'tickets', 'front-1', 'ticket.json'), `${JSON.stringify(meta)}\n`);
+    repo.git(repo.qaDir, 'add', 'tickets/front-1/ticket.json');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Describe front-1');
+
+    const manifest = await build();
+    expect(manifest.entries[0]).toMatchObject(meta);
+    // The file is part of the player's package, so the package digest covers it.
+    expect(manifest.entries[0].package.files).toBe(before.entries[0].package.files + 1);
+    expect(manifest.entries[0].package.digest).not.toBe(before.entries[0].package.digest);
+    for (const entry of manifest.entries.slice(1)) {
+      expect(entry).not.toHaveProperty('type');
+      expect(entry).not.toHaveProperty('bothSides');
+      expect(entry).not.toHaveProperty('skills');
+    }
+  });
+
+  it('refuses an invalid ticket.json, naming the file', async () => {
+    await writeFile(join(repo.qaDir, 'tickets', 'back-1', 'ticket.json'), '{"type":"bug"}\n');
+    repo.git(repo.qaDir, 'add', 'tickets/back-1/ticket.json');
+    repo.git(repo.qaDir, 'commit', '-q', '-m', 'Describe back-1');
+    await expect(build()).rejects.toThrow(/Invalid tickets\/back-1\/ticket\.json: type/);
+  });
+
   it('refuses a ticket without a required file', async () => {
     repo.git(repo.qaDir, 'rm', '-q', 'tickets/front-2/reference.patch');
     repo.git(repo.qaDir, 'commit', '-q', '-m', 'Drop the patch');

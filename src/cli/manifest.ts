@@ -6,6 +6,7 @@ import type { ArchiveFile } from '../contract/archive.ts';
 import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
 import { projectContentOf } from '../contract/project-files.ts';
+import { ticketMetaOf } from '../contract/ticket-meta.ts';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.ts';
 import { ticketQueue, trackedTicketFiles } from './tickets.ts';
 
@@ -151,6 +152,8 @@ export async function buildManifest({ qaDir, version, now }: BuildManifestOption
       codeDigest: treeDigest(codeFiles),
       codeFiles: codeFiles.length,
       package: { path: `tickets/${id}`, files: packageFiles.length, digest: treeDigest(packageFiles) },
+      // tickets/<id>/ticket.json: the type, the both-sides mark and the skills, when the ticket declares them.
+      ...ticketMetaOf(packageFiles, id),
     });
   }
 

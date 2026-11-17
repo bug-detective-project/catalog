@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { assertNoCaseCollisions, safeRelativePath, treeDigest } from '../contract/archive.js';
 import { PACKAGE_EXCLUDED, SUPPORTED_FORMAT_VERSION, parseManifest, projectStackSchema } from '../contract/manifest.js';
 import { projectContentOf } from '../contract/project-files.js';
+import { ticketMetaOf } from '../contract/ticket-meta.js';
 import { gitArchive, gitIn, normalizeLineEndings, resolveBranchRef } from './git.js';
 import { ticketQueue, trackedTicketFiles } from './tickets.js';
 const DIFFICULTIES = ['beginner', 'intermediate', 'advanced'];
@@ -127,6 +128,8 @@ export async function buildManifest({ qaDir, version, now }) {
             codeDigest: treeDigest(codeFiles),
             codeFiles: codeFiles.length,
             package: { path: `tickets/${id}`, files: packageFiles.length, digest: treeDigest(packageFiles) },
+            // tickets/<id>/ticket.json: the type, the both-sides mark and the skills, when the ticket declares them.
+            ...ticketMetaOf(packageFiles, id),
         });
     }
     return parseManifest({

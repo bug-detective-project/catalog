@@ -31,16 +31,46 @@ long to reach players.
 | `minAppVersion` | no                 | The oldest desktop version that can play the project (`X.Y.Z`)                                                                                                                                 |
 | `hidden`        | no                 | Not offered to players who never played the project                                                                                                                                            |
 
-The order of the list is the order of the cards on the Projects screen. Names, descriptions,
-technologies, difficulty and ticket counts come from each project's `qa` branch. Versions are never
+The order of the list is the order of the cards on the Projects screen: the starter first, then the
+projects from beginner to advanced (`bd catalog-check` refuses a project listed after a higher
+level; a project without a `difficulty` keeps the level before it). A project with a ticket whose
+type is not `fix` (see [`ticket.json`](#ticketjson)) needs `minAppVersion` 1.1.0 or newer, the first
+desktop version that knows ticket types. Names, descriptions, technologies, difficulty and ticket
+counts come from each project's `qa` branch. Versions are never
 listed here: each project's `manifest.json` has its own.
 
 In a project's `qa` branch, `package.json` holds `bugDetective.project`: `id`, `name`, the optional
 `difficulty` (`beginner`, `intermediate` or `advanced`) and the optional `stack`
 (`{ "frontend": "React · Vite", "backend": "Node.js · Express", "database": "SQLite" }`, any of the
 three, up to 60 characters each). `bd build` and `bd publish` copy them into `manifest.json`. The
-texts live in `story.en.json` and `story.pt.json`, including the optional `project.skills`: 1 to 5
-skills the player practices, with the same count in every language (`bd validate` checks it).
+texts live in `story.en.json` and `story.pt.json`, including the optional `project.skills`: 1 to 12
+skills the player practices, with the same count in every language (`bd validate` checks it). The
+project card shows the first 5 and a "see all", so the order is the author's choice.
+
+### `ticket.json`
+
+A ticket may describe itself in `tickets/<id>/ticket.json`; `bd build` and `bd publish` copy the
+three fields into the ticket's entry of `manifest.json`:
+
+```json
+{
+  "type": "build",
+  "bothSides": false,
+  "skills": { "en": ["Building components"], "pt": ["Criação de componentes"] }
+}
+```
+
+| Field       | Values                                                                                             | Without it |
+| ----------- | -------------------------------------------------------------------------------------------------- | ---------- |
+| `type`      | `fix`, `build`, `complete`, `test`, `refactor`, `optimize`, `upgrade` or `investigate`             | `fix`      |
+| `bothSides` | `true` when the ticket needs changes in the front end and in the back end (it keeps its one track) | `false`    |
+| `skills`    | 1 to 5 skills per language, up to 60 characters each, the same count in `en` and `pt`, none twice  | none       |
+
+The file is optional and takes no other key. The desktop labels the card with the type and the
+"Front + back" mark, picks its QA and review texts by type, and shows the skills only once the
+ticket is Done, because before that they hint at the cause. Skills are free text here and in
+`project.skills`: there is no skills list to import. Write them with the names of the Bug Detective
+documentation (the skills section of the product requirements).
 
 Change `projects.json` through a pull request: the `catalog` check validates the file and every
 listed project before the merge.
@@ -106,7 +136,7 @@ Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clo
 | `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                               |
 | `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                                 |
 | `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                           |
-| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project (this repository's own check)                                                                                                                                                            |
+| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project, the order of the cards by level and the `minAppVersion` of projects with other ticket types (this repository's own check)                                                               |
 
 ## Publishing a project
 

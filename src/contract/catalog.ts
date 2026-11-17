@@ -10,6 +10,9 @@ const VERSION = /^\d+\.\d+\.\d+$/;
 /** Every project lives in the organization: the catalog never points outside it (no repojacking, no owner publishing on their own). */
 export const PROJECT_OWNER = 'bug-detective-project';
 
+/** The first app version that knows ticket types: a project with a ticket that is not a fix needs at least it. */
+export const TICKET_TYPES_MIN_APP_VERSION = '1.1.0';
+
 export const catalogProjectSchema = z.object({
   /** Must match project.id in the manifest of the project's qa branch. */
   id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/, 'ids are lowercase, like supportdesk'),
