@@ -180,15 +180,16 @@ pull request to this repository):
 Run inside a project's `qa` folder (a worktree of its `qa` branch, next to a clone of `main`). The
 `qa` branch has this package as a dev dependency, so `npx bd` works there.
 
-| Command                                                         | What it does                                                                                                                                                                                                                                                          |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bd build [--base main]`                                        | Regenerates every `tickets/<id>/gate1/` (the tests of `main` plus the regression test of every other ticket) and rebuilds each ticket branch as one commit: `main`, the ticket's `bug.patch`, its `gate1/` and its Jira card                                          |
-| `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass. A project with [services](#project-services) gets them started before each run and removed after it (needs Docker) |
-| `bd validate [--base-ref origin/qa] [--offline]`                | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, the policy and the dependency rules hold, and the version is newer than the one on the base ref; prints one `ok`/`FAIL` line per check                               |
-| `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                                                             |
-| `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                                                               |
-| `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                                                         |
-| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project, the order of the cards by level and the `minAppVersion` of projects with other ticket types or with services (this repository's own check)                                                                            |
+| Command                                                         | What it does                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bd build [--base main]`                                        | Regenerates every `tickets/<id>/gate1/` (the tests of `main` plus the regression test of every other ticket) and rebuilds each ticket branch as one commit: `main`, the ticket's `bug.patch`, its `gate1/` and its Jira card                                                                      |
+| `bd verify [ids...]`                                            | Runs the project's QA tool (`npm run qa`) on each ticket branch: with the bug, Gate 1 passes and Gate 2 fails; after `reference.patch`, both pass. A project with [services](#project-services) gets them started before each run and removed after it (needs Docker)                             |
+| `bd validate [--base-ref origin/qa] [--offline]`                | The committed `manifest.json` matches the committed tickets, the ticket branches and their tags, the policy and the dependency rules hold, and the version is newer than the one on the base ref; prints one `ok`/`FAIL` line per check                                                           |
+| `bd validate --remote <owner/repo> [--ref qa] [--project <id>]` | The same checks on what GitHub serves, ticket by ticket through its tag (`<id>-v<version>`), never through the branch tip                                                                                                                                                                         |
+| `bd publish --version X.Y.Z [--dry-run]`                        | Writes and commits `manifest.json` on the work branch and pushes the ticket branches and the work branch (never `qa`; the merge creates the tags). Run again, it only redoes the pushes                                                                                                           |
+| `bd publish --abort --version X.Y.Z`                            | Undoes a publication that was committed but not pushed: the "Publish" commit and the manifest                                                                                                                                                                                                     |
+| `bd catalog-check [--file projects.json]`                       | Validates the catalog and every listed project, the order of the cards by level and the `minAppVersion` of projects with other ticket types or with services (this repository's own check)                                                                                                        |
+| `bd with-services --file <json> [--project <id>] -- <command…>` | Starts the services of a JSON file shaped like `bugDetective.project.services`, runs the command with their variables (`DATABASE_URL`…) pointing at `127.0.0.1`, removes the services and exits with the command's code. Works in any folder; the CI of a project's `main` uses it for `npm test` |
 
 ## Publishing a project
 
@@ -235,6 +236,21 @@ on:
 jobs:
   app:
     uses: bug-detective-project/catalog/.github/workflows/app.yml@v1.2.1
+```
+
+A project whose tests need its services (a database) keeps on `main` a JSON file with the same
+content as `bugDetective.project.services` of its `qa` branch, and passes it to the workflow with
+the commit it pins. `npm test` then runs through `bd with-services`: each service starts in a
+container, hardened as in `bd verify`, with its variables pointing at `127.0.0.1`, and is removed
+afterwards:
+
+```yaml
+jobs:
+  app:
+    uses: bug-detective-project/catalog/.github/workflows/app.yml@<commit hash> # v1.6.0
+    with:
+      services-file: services.json
+      catalog-ref: <the same commit hash>
 ```
 
 On `qa`, `.github/workflows/publication.yml` validates every pull request and tags the merge. Pin

@@ -3,7 +3,10 @@
  * the variables give, and nothing left behind. Runs only with BD_DOCKER_TESTS=1 (the CI sets it):
  * it pulls the image on the first run.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { connect } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { VERIFY_ROLE_LABEL, startServices, sweepVerifyServices } from '../../src/cli/services.ts';
@@ -90,6 +93,40 @@ describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real
       /The service db \(postgres:17\) stopped before it was ready:[\s\S]*superuser password is not specified/,
     );
     expect(mine()).toEqual([]);
+  }, 180_000);
+
+  it('bd with-services runs a command that reaches the database, and leaves no container', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bd-with-services-docker-'));
+    try {
+      const file = join(dir, 'services.json');
+      writeFileSync(file, JSON.stringify(services));
+      const probe =
+        "const u = new URL(process.env.DATABASE_URL); require('node:net').connect({ host: u.hostname, port: Number(u.port) })" +
+        ".once('connect', () => process.exit(7)).once('error', () => process.exit(1));";
+      const result = spawnSync(
+        process.execPath,
+        [
+          new URL('../../src/cli/main.ts', import.meta.url).pathname,
+          'with-services',
+          '--file',
+          file,
+          '--project',
+          'docker-test',
+          '--',
+          process.execPath,
+          '-e',
+          probe,
+        ],
+        { encoding: 'utf8' },
+      );
+      // The command's own exit code comes back.
+      expect(result.status, result.stderr).toBe(7);
+      expect(docker('ps', '--all', '--filter', `label=${VERIFY_ROLE_LABEL}`, '--format', '{{.Names}}')).not.toMatch(
+        /bugdetective-verify-docker-test-/,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }, 180_000);
 
   it('the sweep keeps the containers of a bd verify that is still running', async () => {
