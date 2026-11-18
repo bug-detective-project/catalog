@@ -10,9 +10,15 @@ describe('the bd command', () => {
   it('lists its commands with --help', () => {
     const result = bd('--help');
     expect(result.status).toBe(0);
-    for (const command of ['build', 'verify', 'validate', 'publish', 'catalog-check']) {
+    for (const command of ['build', 'verify', 'validate', 'publish', 'catalog-check', 'with-services']) {
       expect(result.stdout).toContain(`bd ${command}`);
     }
+  });
+
+  it('with-services exits with 2 without --file', () => {
+    const result = bd('with-services', '--', 'true');
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--file');
   });
 
   it('exits with 2 on an unknown command', () => {

@@ -8,6 +8,7 @@ import { abortPublication, publishProject } from './publish.js';
 import { validateRemote } from './remote.js';
 import { validateLocal } from './validate.js';
 import { formatTable, verifyTickets } from './verify.js';
+import { runWithServices } from './with-services.js';
 const HELP = `Usage: bd <command> [options]   (inside a project's qa folder)
 
   bd build [--base main]                 regenerate every gate1/ and rebuild the ticket branches
@@ -22,6 +23,9 @@ const HELP = `Usage: bd <command> [options]   (inside a project's qa folder)
   bd publish --abort --version X.Y.Z     undo a publication that was committed but not pushed
   bd catalog-check [--file projects.json]
                                          check the catalog and every listed project (catalog repository)
+  bd with-services --file <json> [--project <id>] -- <command...>
+                                         run a command with the services of the file up (a project's
+                                         main uses it for npm test; any folder)
 `;
 const log = (line) => console.log(line);
 async function qaFolder() {
@@ -105,6 +109,22 @@ async function main(argv) {
             const { values } = parseArgs({ args: rest, options: { file: { type: 'string', default: 'projects.json' } } });
             await checkCatalog({ file: values.file, log });
             return 0;
+        }
+        case 'with-services': {
+            const split = rest.indexOf('--');
+            const { values } = parseArgs({
+                args: split === -1 ? rest : rest.slice(0, split),
+                options: { file: { type: 'string' }, project: { type: 'string', default: 'main' } },
+            });
+            if (!values.file) {
+                console.error('bd with-services needs --file <json>');
+                return 2;
+            }
+            return runWithServices({
+                file: values.file,
+                command: split === -1 ? [] : rest.slice(split + 1),
+                project: values.project,
+            });
         }
         default:
             console.error(`Unknown command: ${command}\n\n${HELP}`);

@@ -10,6 +10,17 @@ on:
       node-version:
         type: string
         default: 26.12.1
+      # A project whose tests need its services (a database): the path, on main, of a JSON file
+      # shaped like bugDetective.project.services of its qa branch. npm test then runs with those
+      # services up and their variables set (bd with-services).
+      services-file:
+        type: string
+        default: ''
+      # Required with services-file: the commit of this repository the caller pins this workflow
+      # to (the same hash as in its `uses:` line). bd runs from that commit.
+      catalog-ref:
+        type: string
+        default: ''
 
 jobs:
   app:
@@ -25,4 +36,22 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
+      - if: inputs.services-file == ''
+        run: npm test
+      - if: inputs.services-file != ''
+        name: Check out bd (the catalog at the pinned commit)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: bug-detective-project/catalog
+          ref: ${{ inputs.catalog-ref }}
+          path: .bd
+          persist-credentials: false
+      - if: inputs.services-file != ''
+        name: npm test with the project's services
+        env:
+          SERVICES_FILE: ${{ inputs.services-file }}
+        run: |
+          # Out of the project's folder, so its test runner and linters never see it.
+          mv .bd "$RUNNER_TEMP/bd"
+          npm ci --omit=dev --ignore-scripts --prefix "$RUNNER_TEMP/bd"
+          node "$RUNNER_TEMP/bd/dist/cli/main.js" with-services --file "$SERVICES_FILE" -- npm test
