@@ -5,16 +5,7 @@
  */
 import { z } from 'zod';
 /** The kind of work a ticket asks for. */
-export const TICKET_TYPES = [
-    'fix',
-    'build',
-    'complete',
-    'test',
-    'refactor',
-    'optimize',
-    'upgrade',
-    'investigate',
-];
+export const TICKET_TYPES = ['fix', 'build', 'complete', 'refactor', 'optimize', 'upgrade', 'investigate'];
 export const TICKET_META_FILE = 'ticket.json';
 /** The skills of one language: free text, written with the words of the Bug Detective documentation. */
 const skillList = z

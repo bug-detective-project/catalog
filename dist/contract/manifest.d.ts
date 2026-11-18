@@ -34,7 +34,6 @@ export declare const ticketEntrySchema: z.ZodObject<{
         investigate: "investigate";
         optimize: "optimize";
         refactor: "refactor";
-        test: "test";
         upgrade: "upgrade";
     }>>;
     bothSides: z.ZodOptional<z.ZodBoolean>;
@@ -110,7 +109,6 @@ export declare const manifestSchema: z.ZodObject<{
             investigate: "investigate";
             optimize: "optimize";
             refactor: "refactor";
-            test: "test";
             upgrade: "upgrade";
         }>>;
         bothSides: z.ZodOptional<z.ZodBoolean>;

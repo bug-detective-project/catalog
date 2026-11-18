@@ -7,16 +7,7 @@ import { z } from 'zod';
 import type { ArchiveFile } from './archive.ts';
 
 /** The kind of work a ticket asks for. */
-export const TICKET_TYPES = [
-  'fix',
-  'build',
-  'complete',
-  'test',
-  'refactor',
-  'optimize',
-  'upgrade',
-  'investigate',
-] as const;
+export const TICKET_TYPES = ['fix', 'build', 'complete', 'refactor', 'optimize', 'upgrade', 'investigate'] as const;
 export type TicketType = (typeof TICKET_TYPES)[number];
 
 export const TICKET_META_FILE = 'ticket.json';
