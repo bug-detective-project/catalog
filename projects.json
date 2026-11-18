@@ -10,6 +10,12 @@
       "repository": "bug-detective-project/cornershop",
       "minAppVersion": "1.2.0",
       "hidden": true
+    },
+    {
+      "id": "habitloop",
+      "repository": "bug-detective-project/habitloop",
+      "minAppVersion": "1.1.0",
+      "hidden": true
     }
   ]
 }
