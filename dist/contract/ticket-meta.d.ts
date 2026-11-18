@@ -6,7 +6,7 @@
 import { z } from 'zod';
 import type { ArchiveFile } from './archive.ts';
 /** The kind of work a ticket asks for. */
-export declare const TICKET_TYPES: readonly ['fix', 'build', 'complete', 'test', 'refactor', 'optimize', 'upgrade', 'investigate'];
+export declare const TICKET_TYPES: readonly ['fix', 'build', 'complete', 'refactor', 'optimize', 'upgrade', 'investigate'];
 export type TicketType = (typeof TICKET_TYPES)[number];
 export declare const TICKET_META_FILE = "ticket.json";
 /** The skills a ticket trains, shown to the player once the ticket is Done; the same count in every language. */
@@ -23,7 +23,6 @@ export declare const ticketMetaSchema: z.ZodObject<{
         investigate: "investigate";
         optimize: "optimize";
         refactor: "refactor";
-        test: "test";
         upgrade: "upgrade";
     }>>;
     bothSides: z.ZodOptional<z.ZodBoolean>;

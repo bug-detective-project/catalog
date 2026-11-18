@@ -62,7 +62,7 @@ three fields into the ticket's entry of `manifest.json`:
 
 | Field       | Values                                                                                             | Without it |
 | ----------- | -------------------------------------------------------------------------------------------------- | ---------- |
-| `type`      | `fix`, `build`, `complete`, `test`, `refactor`, `optimize`, `upgrade` or `investigate`             | `fix`      |
+| `type`      | `fix`, `build`, `complete`, `refactor`, `optimize`, `upgrade` or `investigate`                     | `fix`      |
 | `bothSides` | `true` when the ticket needs changes in the front end and in the back end (it keeps its one track) | `false`    |
 | `skills`    | 1 to 5 skills per language, up to 60 characters each, the same count in `en` and `pt`, none twice  | none       |
 

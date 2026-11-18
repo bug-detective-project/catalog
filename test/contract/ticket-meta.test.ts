@@ -19,6 +19,8 @@ describe('ticket.json', () => {
 
   it.each([
     [{ type: 'bug' }, 'type'],
+    // No ticket asks the player to write tests: the type that existed for it was dropped in 1.7.0.
+    [{ type: 'test' }, 'type'],
     [{ skills: { en: [], pt: [] } }, 'skills'],
     [{ skills: { en: ['A', 'B'], pt: ['A'] } }, 'skills'],
     [{ skills: { en: ['A', 'A'], pt: ['A', 'B'] } }, 'skills'],
