@@ -16,6 +16,12 @@
       "repository": "bug-detective-project/habitloop",
       "minAppVersion": "1.1.0",
       "hidden": true
+    },
+    {
+      "id": "clinicbook",
+      "repository": "bug-detective-project/clinicbook",
+      "minAppVersion": "1.1.0",
+      "hidden": true
     }
   ]
 }
