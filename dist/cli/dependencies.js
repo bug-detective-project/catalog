@@ -13,10 +13,40 @@ export function packageName(path) {
 export function installedPackages(lock) {
     return Object.entries(lock.packages ?? {}).filter(([path, pkg]) => path !== '' && !pkg.link && path.includes('node_modules/'));
 }
-/** Origins and integrity: every package from the public registry, with its integrity hash. */
+/**
+ * True for a package that came inside the tarball of another one: the lockfile gives it no origin
+ * and no hash of its own, and the hash of the package that carries it covers its content. It must
+ * be nested in an installed package that is not itself bundled, whose own entry is checked.
+ */
+function bundledInPackage(lock, path, pkg) {
+    if (!pkg.inBundle) {
+        return false;
+    }
+    for (let parent = path;;) {
+        const index = parent.lastIndexOf('/node_modules/');
+        if (index === -1) {
+            return false;
+        }
+        parent = parent.slice(0, index);
+        const carrier = lock.packages?.[parent];
+        if (!carrier || carrier.link || !parent.includes('node_modules/')) {
+            return false;
+        }
+        if (!carrier.inBundle) {
+            return true;
+        }
+    }
+}
+/**
+ * Origins and integrity: every package from the public registry, with its integrity hash. A
+ * package bundled inside another one is covered by that one's entry.
+ */
 export function lockfileOriginProblems(lock) {
     const problems = [];
     for (const [path, pkg] of installedPackages(lock)) {
+        if (bundledInPackage(lock, path, pkg)) {
+            continue;
+        }
         if (!pkg.resolved?.startsWith(NPM_REGISTRY)) {
             problems.push(`${packageName(path)} comes from ${pkg.resolved ?? 'nowhere'}: every dependency must come from ${NPM_REGISTRY}`);
         }

@@ -4,6 +4,8 @@ export interface LockfilePackage {
     integrity?: string;
     link?: boolean;
     hasInstallScript?: boolean;
+    /** Shipped inside the tarball of the package it is nested in (npm's bundleDependencies). */
+    inBundle?: boolean;
 }
 export interface Lockfile {
     lockfileVersion?: number;
@@ -16,7 +18,10 @@ export interface PackageJson {
 export declare function packageName(path: string): string;
 /** The installed packages of a lockfile: the root and workspace links left out. */
 export declare function installedPackages(lock: Lockfile): [string, LockfilePackage][];
-/** Origins and integrity: every package from the public registry, with its integrity hash. */
+/**
+ * Origins and integrity: every package from the public registry, with its integrity hash. A
+ * package bundled inside another one is covered by that one's entry.
+ */
 export declare function lockfileOriginProblems(lock: Lockfile): string[];
 /**
  * Install scripts: a package with one runs only when package.json allows it (npm's allowScripts),

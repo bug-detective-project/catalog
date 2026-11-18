@@ -32,6 +32,36 @@ describe('lockfileOriginProblems', () => {
     expect(problems).toEqual([]);
   });
 
+  it('accepts a package bundled inside a registry package: the hash of that package covers it', () => {
+    const problems = lockfileOriginProblems(
+      lock({
+        'node_modules/@tailwindcss/oxide-wasm32-wasi': pkg('@tailwindcss/oxide-wasm32-wasi', '4.3.5'),
+        'node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/core': { version: '1.4.3', inBundle: true },
+        'node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/core/node_modules/tslib': {
+          version: '2.8.0',
+          inBundle: true,
+        },
+      }),
+    );
+    expect(problems).toEqual([]);
+  });
+
+  it('refuses a bundled package that is inside no package, or inside a workspace', () => {
+    const problems = lockfileOriginProblems(
+      lock({
+        'node_modules/loose': { version: '1.0.0', inBundle: true },
+        client: { link: true },
+        'client/node_modules/inside': { version: '1.0.0', inBundle: true },
+      }),
+    );
+    expect(problems).toEqual([
+      expect.stringMatching(/^loose comes from nowhere/),
+      'loose has no integrity hash in the lockfile',
+      expect.stringMatching(/^inside comes from nowhere/),
+      'inside has no integrity hash in the lockfile',
+    ]);
+  });
+
   it('names a package from git, from another host or without integrity', () => {
     const problems = lockfileOriginProblems(
       lock({

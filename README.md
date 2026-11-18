@@ -158,14 +158,20 @@ these rules, applied by `bd validate` (the contract's `dependencies.ts`; a list 
 pull request to this repository):
 
 - every package comes from `https://registry.npmjs.org/` and has an integrity hash (no git or URL
-  dependencies);
+  dependencies). A package bundled inside another one (`inBundle` in the lockfile, as in Tailwind's
+  `@tailwindcss/oxide-wasm32-wasi`) has neither of its own: the hash of the package that carries it
+  covers it;
 - `package.json` may allow install scripts (npm's `allowScripts`) only for the packages of
   `ALLOWED_INSTALL_SCRIPTS` (`better-sqlite3` today); other packages with scripts are fine, npm
   does not run them;
 - every version has been on the registry for at least 7 days (`min-release-age`), read from the
   registry's `time` field; `--offline` skips this check;
 - `.npmrc` on `main` and on every ticket branch sets `allow-git=none`, `allow-remote=none` and
-  `min-release-age=7`, so the same rules protect the author's own `npm install`.
+  `min-release-age=7`, so the same rules protect the author's own `npm install`. One known
+  exception when **creating** a lockfile: npm refuses to resolve a package with bundled
+  dependencies under `allow-remote=none` (`EALLOWREMOTE`). Run that one `npm install` with
+  `--allow-remote=all` and let `bd validate` check the lockfile it writes; `npm ci` from the
+  lockfile needs no flag.
 
 `npm audit` is not part of `bd validate`: it runs as a non-blocking step of the project's `main` CI.
 
