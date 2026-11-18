@@ -4,6 +4,12 @@
       "id": "supportdesk",
       "repository": "bug-detective-project/supportdesk",
       "starter": true
+    },
+    {
+      "id": "cornershop",
+      "repository": "bug-detective-project/cornershop",
+      "minAppVersion": "1.2.0",
+      "hidden": true
     }
   ]
 }
