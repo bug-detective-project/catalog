@@ -22,6 +22,12 @@
       "repository": "bug-detective-project/clinicbook",
       "minAppVersion": "1.1.0",
       "hidden": true
+    },
+    {
+      "id": "recipebox",
+      "repository": "bug-detective-project/recipebox",
+      "minAppVersion": "1.2.0",
+      "hidden": true
     }
   ]
 }
