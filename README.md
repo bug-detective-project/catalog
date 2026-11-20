@@ -121,11 +121,52 @@ containers afterwards, also when the run fails or is interrupted. Containers a c
 behind are removed by the next one. A catalog project that declares services needs `minAppVersion`
 1.2.0 or newer.
 
+### Project ports
+
+Without a declaration, the desktop publishes two ports of the workspace on the player's computer:
+the client (5173) and the API (3001). A project whose code listens on other ports, such as one with
+two services that talk to each other, declares them in `bugDetective.project.ports` of the
+`package.json` on `qa`; `bd` copies the declaration into the manifest:
+
+```json
+"ports": {
+  "client": {
+    "port": 5173,
+    "open": true,
+    "label": { "en": "Smoke Desk", "pt": "Smoke Desk" },
+    "variables": { "CLIENT_ORIGIN": "http://localhost:{{port}}" }
+  },
+  "api": { "port": 3001 },
+  "audit": {
+    "port": 3002,
+    "label": { "en": "Audit service", "pt": "Serviço de auditoria" },
+    "variables": { "VITE_AUDIT_URL": "http://localhost:{{port}}" }
+  }
+}
+```
+
+- `port` is the port the process listens on inside the workspace, from 1024 to 55535, each once.
+  The desktop publishes it on `127.0.0.1` on a free port of the computer, the same number when it
+  is free, and whether the process listens on `localhost` or on `0.0.0.0`.
+- `client` is required: it is the port "Open app in browser" opens. `open: true` gives another
+  port its own button on the Dashboard, and `label` the name shown there (the port's name without
+  it).
+- `variables` are what the code reads, with `{{port}}` filled with the port chosen on the computer.
+  Their names follow the rules of the services' variables and repeat no variable of a service or of
+  another port.
+- A port name is lower-case letters, digits and `-`, up to 20 characters; a project has at most 6
+  ports.
+- In QA nothing is published: the project's QA CLI picks a free port for each process and fills the
+  same variables with `portVariables(ports, chosen)` from the contract.
+
+A catalog project that declares ports needs `minAppVersion` 1.3.0 or newer.
+
 ## The contract (`@bug-detective/catalog/contract`)
 
 Schemas and checks shared by the desktop app and `bd`: the catalog, the project manifest
 (`formatVersion`, currently 1; a newer one raises `UnsupportedFormatError`, which the app shows as
-"update Bug Detective"), the story, `review.json`, archive digests, the verification of a ticket
+"update Bug Detective"), the story, `review.json`, a project's services (`services.ts`) and ports
+(`ports.ts`, with `portVariables`), archive digests, the verification of a ticket
 package and its code against the manifest, and the archive path rules: besides `..`, absolute paths
 and drive letters, a file name Windows cannot store (`:`, `< > " | ? *`, reserved device names such
 as `CON` or `aux.ts`, a trailing dot or space) or two paths that differ only by case are refused,

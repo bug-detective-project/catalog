@@ -43,6 +43,11 @@ export declare const SERVICES_MAX = 4;
 export declare const SERVICE_READY_TIMEOUT_MS = 60000;
 /** The process limit of a service container. */
 export declare const SERVICE_PIDS = 256;
+/**
+ * What is wrong with the name of a variable a project declares for its code (a service's or a
+ * port's); undefined when it is fine.
+ */
+export declare function variableNameProblem(name: string): string | undefined;
 /** The bytes of a docker memory size in the only form the contract takes: a whole number and k, m or g. */
 export declare function memoryBytes(value: string): number;
 declare const projectServiceSchema: z.ZodObject<{

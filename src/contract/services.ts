@@ -77,6 +77,23 @@ const RESERVED_VARIABLES = ['PATH', 'HOME', 'NODE_OPTIONS', 'NODE_PATH', 'SHELL'
 
 const UNITS = { k: 1024, m: 1024 ** 2, g: 1024 ** 3 } as const;
 
+/**
+ * What is wrong with the name of a variable a project declares for its code (a service's or a
+ * port's); undefined when it is fine.
+ */
+export function variableNameProblem(name: string): string | undefined {
+  if (!VARIABLE_NAME.test(name)) {
+    return 'a variable name is upper-case letters, digits and _, starting with a letter';
+  }
+  if (name.startsWith(APP_PREFIX)) {
+    return `names starting with ${APP_PREFIX} belong to the app`;
+  }
+  if (RESERVED_VARIABLES.includes(name)) {
+    return `${name} is reserved (${RESERVED_VARIABLES.join(', ')})`;
+  }
+  return undefined;
+}
+
 /** The bytes of a docker memory size in the only form the contract takes: a whole number and k, m or g. */
 export function memoryBytes(value: string): number {
   const match = MEMORY.exec(value);
@@ -120,12 +137,9 @@ const projectServiceSchema = z
   .superRefine((service, ctx) => {
     for (const [name, value] of Object.entries(service.variables ?? {})) {
       const issue = (message: string) => ctx.addIssue({ code: 'custom', message, path: ['variables', name] });
-      if (!VARIABLE_NAME.test(name)) {
-        issue('a variable name is upper-case letters, digits and _, starting with a letter');
-      } else if (name.startsWith(APP_PREFIX)) {
-        issue(`names starting with ${APP_PREFIX} belong to the app`);
-      } else if (RESERVED_VARIABLES.includes(name)) {
-        issue(`${name} is reserved (${RESERVED_VARIABLES.join(', ')})`);
+      const nameProblem = variableNameProblem(name);
+      if (nameProblem) {
+        issue(nameProblem);
       } else {
         const unknown = [...value.matchAll(MARKER)].map((match) => match[1] ?? '').filter((m) => !MARKERS.includes(m));
         if (unknown.length > 0) {

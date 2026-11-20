@@ -12,6 +12,8 @@ import {
 } from '../contract/manifest.ts';
 import type { ProjectManifest, TicketEntry } from '../contract/manifest.ts';
 import { projectContentOf } from '../contract/project-files.ts';
+import { portsProblems } from '../contract/ports.ts';
+import type { ProjectPorts } from '../contract/ports.ts';
 import { projectServicesProblems } from '../contract/services.ts';
 import type { ProjectMemory, ProjectServices } from '../contract/services.ts';
 import { ticketMetaOf } from '../contract/ticket-meta.ts';
@@ -27,6 +29,7 @@ export interface ProjectInfo {
   stack?: ProjectManifest['project']['stack'];
   services?: ProjectServices;
   memory?: ProjectMemory;
+  ports?: ProjectPorts;
 }
 
 /** bugDetective.project of the qa folder's package.json. */
@@ -40,6 +43,7 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
         stack?: unknown;
         services?: unknown;
         memory?: unknown;
+        ports?: unknown;
       };
     };
   };
@@ -72,8 +76,8 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
     }
     stack = parsed.data;
   }
-  const { services, memory } = project;
-  const problem = projectServicesProblems({ services, memory })[0];
+  const { services, memory, ports } = project;
+  const problem = [...projectServicesProblems({ services, memory }), ...portsProblems({ ports, services })][0];
   if (problem) {
     throw new Error(`${qaDir}/package.json: bugDetective.project.${problem}`);
   }
@@ -84,6 +88,7 @@ export async function readProject(qaDir: string): Promise<ProjectInfo> {
     ...(stack !== undefined && { stack }),
     ...(services !== undefined && { services: services as ProjectServices }),
     ...(memory !== undefined && { memory: memory as ProjectMemory }),
+    ...(ports !== undefined && { ports: ports as ProjectPorts }),
   };
 }
 

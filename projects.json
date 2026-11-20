@@ -28,6 +28,12 @@
       "repository": "bug-detective-project/recipebox",
       "minAppVersion": "1.2.0",
       "hidden": true
+    },
+    {
+      "id": "librarydesk",
+      "repository": "bug-detective-project/librarydesk",
+      "minAppVersion": "1.3.0",
+      "hidden": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import type { ArchiveFile } from '../contract/archive.ts';
 import type { ProjectManifest } from '../contract/manifest.ts';
+import type { ProjectPorts } from '../contract/ports.ts';
 import type { ProjectMemory, ProjectServices } from '../contract/services.ts';
 declare const DIFFICULTIES: readonly ['beginner', 'intermediate', 'advanced'];
 export interface ProjectInfo {
@@ -9,6 +10,7 @@ export interface ProjectInfo {
     stack?: ProjectManifest['project']['stack'];
     services?: ProjectServices;
     memory?: ProjectMemory;
+    ports?: ProjectPorts;
 }
 /** bugDetective.project of the qa folder's package.json. */
 export declare function readProject(qaDir: string): Promise<ProjectInfo>;
