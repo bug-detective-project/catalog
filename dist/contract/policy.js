@@ -14,6 +14,7 @@ export const ALLOWED_VSCODE_EXTENSIONS = [
     // database on the list of service images.
     'mtxr.sqltools',
     'mtxr.sqltools-driver-pg',
+    'mtxr.sqltools-driver-mysql',
 ];
 /** Files a project may ship in .vscode/. */
 export const ALLOWED_VSCODE_FILES = ['settings.json', 'extensions.json', 'launch.json'];

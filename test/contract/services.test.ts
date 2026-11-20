@@ -33,6 +33,27 @@ describe('the image list', () => {
       ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
     });
   });
+
+  it('pins mysql:8.4 by digest, with what the app needs to run it', () => {
+    expect(SERVICE_IMAGES['mysql:8.4']).toEqual({
+      reference: 'mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902',
+      port: 3306,
+      user: '999:999',
+      dataPaths: ['/var/lib/mysql'],
+      tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
+      ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+    });
+  });
+
+  it('accepts a MySQL service', () => {
+    const mysql = {
+      image: 'mysql:8.4',
+      memory: '512m',
+      env: { MYSQL_ROOT_PASSWORD: 'library', MYSQL_DATABASE: 'library' },
+      variables: { DATABASE_URL: 'mysql://root:library@{{host}}:{{port}}/library' },
+    };
+    expect(projectServicesProblems({ services: { db: mysql } })).toEqual([]);
+  });
 });
 
 describe('a project services declaration', () => {

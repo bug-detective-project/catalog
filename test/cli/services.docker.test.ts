@@ -1,6 +1,6 @@
 /**
- * The services of bd verify on a real Docker: a PostgreSQL that accepts connections on the address
- * the variables give, and nothing left behind. Runs only with BD_DOCKER_TESTS=1 (the CI sets it):
+ * The services of bd verify on a real Docker: a PostgreSQL and a MySQL that accept connections on
+ * the address the variables give, and nothing left behind. Runs only with BD_DOCKER_TESTS=1 (the CI sets it):
  * it pulls the image on the first run.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -22,6 +22,16 @@ const services: ProjectServices = {
   },
 };
 const REFERENCE = SERVICE_IMAGES['postgres:17']!.reference;
+
+const mysql: ProjectServices = {
+  db: {
+    image: 'mysql:8.4',
+    memory: '512m',
+    env: { MYSQL_ROOT_PASSWORD: 'library', MYSQL_DATABASE: 'library' },
+    variables: { DATABASE_URL: 'mysql://root:library@{{host}}:{{port}}/library' },
+  },
+};
+const MYSQL_REFERENCE = SERVICE_IMAGES['mysql:8.4']!.reference;
 
 const docker = (...args: string[]): string => execFileSync('docker', args, { encoding: 'utf8' }).trim();
 /** The verify containers of this test process, running or not. */
@@ -50,10 +60,12 @@ const opens = (host: string, port: number): Promise<boolean> =>
   });
 
 describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real Docker', () => {
-  let hadImage = false;
+  const had = new Map<string, boolean>();
 
   beforeAll(() => {
-    hadImage = docker('images', '--quiet', REFERENCE) !== '';
+    for (const reference of [REFERENCE, MYSQL_REFERENCE]) {
+      had.set(reference, docker('images', '--quiet', reference) !== '');
+    }
   });
 
   afterAll(() => {
@@ -61,9 +73,11 @@ describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real
     if (left.length > 0) {
       docker('rm', '--force', '--volumes', ...left);
     }
-    // The image is removed only when this test pulled it.
-    if (!hadImage && docker('images', '--quiet', REFERENCE) !== '') {
-      docker('rmi', REFERENCE);
+    // An image is removed only when this test pulled it.
+    for (const [reference, present] of had) {
+      if (!present && docker('images', '--quiet', reference) !== '') {
+        docker('rmi', reference);
+      }
     }
   });
 
@@ -86,6 +100,26 @@ describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real
     }
     expect(mine()).toEqual([]);
   }, 180_000);
+
+  it('starts a MySQL with 512m, hardened like PostgreSQL, that answers on the published address', async () => {
+    const running = await startServices(mysql, { project: 'docker-test' });
+    try {
+      const url = new URL(running.env.DATABASE_URL!);
+      expect(await opens(url.hostname, Number(url.port))).toBe(true);
+
+      const [name] = mine();
+      expect(
+        docker('exec', name!, 'mysql', '-uroot', '-plibrary', '-h', '127.0.0.1', '-NBe', 'select 1', 'library'),
+      ).toBe('1');
+      expect(docker('port', name!, '3306/tcp')).toMatch(/^127\.0\.0\.1:\d+$/);
+      expect(docker('inspect', '--format', '{{.Config.User}} {{.HostConfig.ReadonlyRootfs}}', name!)).toBe(
+        '999:999 true',
+      );
+    } finally {
+      await running.stop();
+    }
+    expect(mine()).toEqual([]);
+  }, 300_000);
 
   it('fails with the container log when the service cannot start, and leaves nothing', async () => {
     const broken: ProjectServices = { db: { image: 'postgres:17' } };

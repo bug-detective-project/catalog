@@ -38,6 +38,16 @@ export const SERVICE_IMAGES: Readonly<Record<string, ServiceImage>> = {
     tmpfsPaths: ['/var/run/postgresql', '/tmp'],
     ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
   },
+  // MySQL 8.4 LTS. Its default server needs 512m: at 256m it is killed while it creates its data.
+  // Ready asks over TCP, because while it creates the data the image runs a server without a network.
+  'mysql:8.4': {
+    reference: 'mysql@sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902',
+    port: 3306,
+    user: '999:999',
+    dataPaths: ['/var/lib/mysql'],
+    tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
+    ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+  },
 };
 
 export const SERVICE_MEMORY_DEFAULT = '256m';
