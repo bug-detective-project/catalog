@@ -3,6 +3,7 @@
  * and checked by the bd CLI and by every content source of the desktop app.
  */
 import { z } from 'zod';
+import { projectPortsSchema } from './ports.js';
 import { peakMemoryProblem, projectMemorySchema, projectServicesSchema } from './services.js';
 import { TICKET_TYPES, ticketSkillsSchema } from './ticket-meta.js';
 export const TRACKS = ['front', 'back'];
@@ -55,6 +56,8 @@ export const manifestSchema = z
         services: projectServicesSchema.optional(),
         /** A larger workspace than the default (package.json bugDetective.project.memory). */
         memory: projectMemorySchema.optional(),
+        /** The ports the project publishes (package.json bugDetective.project.ports). */
+        ports: projectPortsSchema.optional(),
     }),
     version: z.string().regex(/^\d+\.\d+\.\d+$/),
     createdAt: z.string(),

@@ -179,6 +179,7 @@ describe('buildManifest', () => {
       const { project } = await build();
       expect(project).not.toHaveProperty('services');
       expect(project).not.toHaveProperty('memory');
+      expect(project).not.toHaveProperty('ports');
     });
 
     it('refuses an invalid declaration, naming the file and the field', async () => {
@@ -186,6 +187,20 @@ describe('buildManifest', () => {
       await expect(build()).rejects.toThrow(
         /package\.json: bugDetective\.project\.services\.db\.memory: must be between 64m and 1g/,
       );
+    });
+
+    it('copies bugDetective.project.ports into the manifest', async () => {
+      const ports = {
+        client: { port: 5173, open: true },
+        api: { port: 3001, variables: { API_URL: 'http://localhost:{{port}}' } },
+      };
+      await declare({ ports });
+      expect((await build()).project.ports).toEqual(ports);
+    });
+
+    it('refuses an invalid ports declaration, naming the file and the field', async () => {
+      await declare({ ports: { api: { port: 3001 } } });
+      await expect(build()).rejects.toThrow(/package\.json: bugDetective\.project\.ports: .*client/);
     });
 
     it('refuses a memory peak above the limit', async () => {
