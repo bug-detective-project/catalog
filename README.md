@@ -92,7 +92,7 @@ A project whose code needs a database declares it in `bugDetective.project.servi
 ```
 
 - `image` is a name from the list of allowed images (`SERVICE_IMAGES` in `src/contract/services.ts`),
-  today only `postgres:17`. The list pins each image by digest and knows its port, its unprivileged
+  today `postgres:17` and `mysql:8.4` (whose default server needs `512m`). The list pins each image by digest and knows its port, its unprivileged
   user, its data paths and the command that tells when it is ready. A new image enters by pull
   request to this repository.
 - `memory` is the container's limit, from `64m` to `1g` (default `256m`), written as a whole number
@@ -133,7 +133,7 @@ because players extract the packages on their disk.
 
 It also holds the project policy (`policy.ts`), applied by `bd validate` to every publication:
 the VS Code extensions a project may recommend (`ALLOWED_VSCODE_EXTENSIONS`: ESLint, Prettier,
-Vitest and, for looking at the data of a project's services, SQLTools with its PostgreSQL driver; UI extensions run on the player's PC, outside the workspace), the files allowed in
+Vitest and, for looking at the data of a project's services, SQLTools with its PostgreSQL and MySQL drivers; UI extensions run on the player's PC, outside the workspace), the files allowed in
 `.vscode/` (`settings.json`, `extensions.json`, `launch.json`), checked on `main` and on every
 ticket branch, and the commands a ticket, hint, solution, review or story text must never ask the
 player to run (`DANGEROUS_TEXT_PATTERNS`: downloads piped into a shell, PowerShell, `cmd /c`,
