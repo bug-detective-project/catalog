@@ -4,6 +4,7 @@ import {
   memoryBytes,
   peakMemory,
   projectServicesProblems,
+  serviceCommand,
   serviceRunArgs,
   serviceVariables,
 } from '../../src/contract/services.ts';
@@ -19,6 +20,15 @@ const db = {
 };
 const services: ProjectServices = { db };
 
+/** The cache of CartWorks: a Redis with a password and a memory limit, both given as arguments. */
+const cache = {
+  image: 'redis:8',
+  memory: '128m',
+  args: ['--requirepass', 'cartworks', '--maxmemory', '96mb', '--maxmemory-policy', 'allkeys-lru'],
+  variables: { REDIS_URL: 'redis://:cartworks@{{host}}:{{port}}' },
+};
+const withCache = (change: Record<string, unknown>) => ({ services: { cache: { ...cache, ...change } } });
+
 /** A service that differs from the example in one field. */
 const withDb = (change: Record<string, unknown>) => ({ services: { db: { ...db, ...change } } });
 
@@ -31,6 +41,19 @@ describe('the image list', () => {
       dataPaths: ['/var/lib/postgresql/data'],
       tmpfsPaths: ['/var/run/postgresql', '/tmp'],
       ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
+      server: 'postgres',
+      reservedOptions: [
+        '-p',
+        '--port',
+        '-D',
+        '--data-directory',
+        '-h',
+        '--listen-addresses',
+        '-k',
+        '--unix-socket-directories',
+        '--config-file',
+        '--hba-file',
+      ],
     });
   });
 
@@ -42,6 +65,40 @@ describe('the image list', () => {
       dataPaths: ['/var/lib/mysql'],
       tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
       ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+      server: 'mysqld',
+      reservedOptions: [
+        '-P',
+        '--port',
+        '-h',
+        '--datadir',
+        '--bind-address',
+        '-u',
+        '--user',
+        '-S',
+        '--socket',
+        '--skip-networking',
+      ],
+    });
+  });
+
+  it('pins redis:8 by digest, with what the app needs to run it', () => {
+    expect(SERVICE_IMAGES['redis:8']).toEqual({
+      reference: 'redis@sha256:91cc9227bca4d2f717b1ad33d2ebba8127c16b0c2ca731dd9e6010d7629227a5',
+      port: 6379,
+      user: '999:999',
+      dataPaths: ['/data'],
+      tmpfsPaths: [],
+      ready: ['redis-cli', '-h', '127.0.0.1', 'ping'],
+      server: 'redis-server',
+      reservedOptions: ['--port', '--bind', '--dir', '--unixsocket', '--tls-port', '--daemonize'],
+    });
+  });
+
+  it('names the server program of every image', () => {
+    expect(Object.fromEntries(Object.entries(SERVICE_IMAGES).map(([name, image]) => [name, image.server]))).toEqual({
+      'postgres:17': 'postgres',
+      'mysql:8.4': 'mysqld',
+      'redis:8': 'redis-server',
     });
   });
 
@@ -107,6 +164,68 @@ describe('a project services declaration', () => {
     expect(problems[0]).toMatch(new RegExp(`^${field}: .+`));
   });
 
+  it('accepts the CartWorks cache', () => {
+    expect(projectServicesProblems({ services: { cache } })).toEqual([]);
+  });
+
+  it('accepts PostgreSQL settings given with -c', () => {
+    const args = ['-c', 'log_min_duration_statement=0', '-c', 'max_connections=40'];
+    expect(projectServicesProblems(withDb({ args }))).toEqual([]);
+  });
+
+  it('accepts a service with an empty list of args', () => {
+    expect(projectServicesProblems(withDb({ args: [] }))).toEqual([]);
+  });
+
+  it('refuses args that do not start with an option', () => {
+    expect(projectServicesProblems(withCache({ args: ['sh', '-c', 'id'] }))).toEqual([
+      'services.cache.args.0: the first argument must be an option (start with -)',
+    ]);
+  });
+
+  it('refuses more than 24 args', () => {
+    const args = Array.from({ length: 25 }, () => '--appendonly');
+    expect(projectServicesProblems(withCache({ args }))).toEqual(['services.cache.args: at most 24 arguments']);
+  });
+
+  it.each([
+    ['an empty arg', ['--requirepass', '']],
+    ['an arg longer than 200 characters', ['--requirepass', 'x'.repeat(201)]],
+    ['an arg with a line break', ['--requirepass', 'one\ntwo']],
+  ])('refuses %s, naming its position', (_, args) => {
+    const problems = projectServicesProblems(withCache({ args }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/^services\.cache\.args\.1: .+/);
+  });
+
+  it.each([
+    ['redis:8', ['--port', '7000'], 0, '--port'],
+    ['redis:8', ['--port=7000'], 0, '--port'],
+    ['redis:8', ['--maxmemory', '96mb', '--dir', '/tmp'], 2, '--dir'],
+    ['postgres:17', ['-c', 'port=5433'], 1, '--port'],
+    ['postgres:17', ['-cport=5433'], 0, '--port'],
+    ['postgres:17', ['--data_directory=/x'], 0, '--data-directory'],
+    ['postgres:17', ['-p', '5433'], 0, '-p'],
+    ['postgres:17', ['-c', 'max_connections=40', '-c', 'listen_addresses=*'], 3, '--listen-addresses'],
+    ['mysql:8.4', ['-P3307'], 0, '-P'],
+    ['mysql:8.4', ['--datadir=/x'], 0, '--datadir'],
+    ['mysql:8.4', ['--skip_networking'], 0, '--skip-networking'],
+  ])('refuses an option the app controls: %s %j', (image, args, index, option) => {
+    expect(projectServicesProblems({ services: { svc: { image, args } } })).toEqual([
+      `services.svc.args.${index}: ${option} is set by the app`,
+    ]);
+  });
+
+  it.each([
+    ['mysql:8.4', ['--port-open-timeout=5']],
+    ['mysql:8.4', ['--performance-schema=OFF', '--innodb-buffer-pool-size=32M']],
+    ['postgres:17', ['-c', 'log_min_duration_statement=0']],
+    // -p is PostgreSQL's port; MySQL's is -P.
+    ['mysql:8.4', ['-p']],
+  ])('accepts an option that only looks like a reserved one: %s %j', (image, args) => {
+    expect(projectServicesProblems({ services: { svc: { image, args } } })).toEqual([]);
+  });
+
   it('refuses five services', () => {
     const five = Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((name) => [name, { image: 'postgres:17' }]));
     expect(projectServicesProblems({ services: five })).toEqual(['services: at most 4 services']);
@@ -163,6 +282,33 @@ describe('the variables of the code', () => {
   });
 });
 
+describe('the command of a service', () => {
+  it('is empty without args, and with an empty list', () => {
+    expect(serviceCommand(db)).toEqual([]);
+    expect(serviceCommand({ ...db, args: [] })).toEqual([]);
+  });
+
+  it('puts the server program before the args', () => {
+    expect(serviceCommand({ image: 'redis:8', args: ['--requirepass', 'cartworks'] })).toEqual([
+      'redis-server',
+      '--requirepass',
+      'cartworks',
+    ]);
+    expect(serviceCommand({ image: 'postgres:17', args: ['-c', 'max_connections=40'] })[0]).toBe('postgres');
+    expect(serviceCommand({ image: 'mysql:8.4', args: ['--skip-log-bin'] })[0]).toBe('mysqld');
+  });
+
+  it('keeps an argument with spaces and shell characters as one element', () => {
+    const password = 'a b; rm -rf / $(id) "quoted"';
+    expect(projectServicesProblems(withCache({ args: ['--requirepass', password] }))).toEqual([]);
+    expect(serviceCommand({ image: 'redis:8', args: ['--requirepass', password] })).toEqual([
+      'redis-server',
+      '--requirepass',
+      password,
+    ]);
+  });
+});
+
 describe('the docker run arguments of a service', () => {
   const labels = { 'bugdetective.role': 'verify-service', 'bugdetective.project': 'shop' };
 
@@ -199,6 +345,18 @@ describe('the docker run arguments of a service', () => {
   it('uses the default memory when the service declares none', () => {
     const args = serviceRunArgs({ image: 'postgres:17' }, { name: 'svc', labels: {}, data: 'tmpfs' });
     expect(has(args, '--memory', '256m')).toBe(true);
+  });
+
+  it('are the same with and without args', () => {
+    const options = { name: 'svc', labels, data: 'tmpfs' as const };
+    expect(serviceRunArgs({ ...db, args: ['-c', 'max_connections=40'] }, options)).toEqual(serviceRunArgs(db, options));
+  });
+
+  it('runs a Redis with its data in memory and nothing else in memory', () => {
+    const args = serviceRunArgs(cache, { name: 'svc', labels, data: 'tmpfs' });
+    expect(args.filter((arg) => arg === '--tmpfs')).toHaveLength(1);
+    expect(has(args, '--tmpfs', '/data:uid=999,gid=999,mode=0700')).toBe(true);
+    expect(has(args, '--memory', '128m')).toBe(true);
   });
 
   it('refuses a data path without a volume', () => {
