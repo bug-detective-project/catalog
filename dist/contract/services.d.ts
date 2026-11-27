@@ -25,6 +25,11 @@ export interface ServiceImage {
     tmpfsPaths: readonly string[];
     /** A command that exits 0 inside the container once the server accepts connections. */
     ready: readonly string[];
+    /**
+     * The first app version whose contract knows this image: an older app refuses the whole manifest
+     * of a project that uses it, so the catalog asks at least this `minAppVersion` of such a project.
+     */
+    minAppVersion: string;
     /** The server program: what runs, followed by the project's `args`, when a service declares any. */
     server: string;
     /**

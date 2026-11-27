@@ -41,6 +41,7 @@ describe('the image list', () => {
       dataPaths: ['/var/lib/postgresql/data'],
       tmpfsPaths: ['/var/run/postgresql', '/tmp'],
       ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
+      minAppVersion: '1.2.0',
       server: 'postgres',
       reservedOptions: [
         '-p',
@@ -65,6 +66,7 @@ describe('the image list', () => {
       dataPaths: ['/var/lib/mysql'],
       tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
       ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+      minAppVersion: '1.3.0',
       server: 'mysqld',
       reservedOptions: [
         '-P',
@@ -89,6 +91,7 @@ describe('the image list', () => {
       dataPaths: ['/data'],
       tmpfsPaths: [],
       ready: ['redis-cli', '-h', '127.0.0.1', 'ping'],
+      minAppVersion: '1.4.0',
       server: 'redis-server',
       reservedOptions: ['--port', '--bind', '--dir', '--unixsocket', '--tls-port', '--daemonize'],
     });
@@ -188,8 +191,18 @@ describe('a project services declaration', () => {
     expect(projectServicesProblems(withCache({ args }))).toEqual(['services.cache.args: at most 24 arguments']);
   });
 
+  it('accepts an empty argument after an option', () => {
+    // Redis turns its snapshots off with an empty value: --save "".
+    expect(projectServicesProblems(withCache({ args: ['--save', ''] }))).toEqual([]);
+  });
+
+  it('refuses an empty first argument', () => {
+    expect(projectServicesProblems(withCache({ args: ['', '--save'] }))).toEqual([
+      'services.cache.args.0: the first argument must be an option (start with -)',
+    ]);
+  });
+
   it.each([
-    ['an empty arg', ['--requirepass', '']],
     ['an arg longer than 200 characters', ['--requirepass', 'x'.repeat(201)]],
     ['an arg with a line break', ['--requirepass', 'one\ntwo']],
   ])('refuses %s, naming its position', (_, args) => {

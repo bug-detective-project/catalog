@@ -142,11 +142,33 @@ describe('bd catalog-check, the order and the app version', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('asks no newer app version of a service with an empty list of arguments', async () => {
+  it('requires 1.4.0 for an empty list of arguments too: an older app refuses the field itself', async () => {
     levels({ a: 'beginner', b: 'beginner' });
     manifests.b.services = { db: { image: 'postgres:17', args: [] } };
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.2.0' })])).rejects.toThrow(
+      'b: declares service arguments and needs minAppVersion >= 1.4.0',
+    );
     await expect(
-      check([project('a', { starter: true }), project('b', { minAppVersion: '1.2.0' })]),
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.4.0' })]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('requires the first app version that knows the image of each service', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    manifests.b.services = { cache: { image: 'redis:8' } };
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.3.0' })])).rejects.toThrow(
+      'b: uses the image redis:8 and needs minAppVersion >= 1.4.0',
+    );
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.4.0' })]),
+    ).resolves.toBeUndefined();
+
+    manifests.b.services = { db: { image: 'mysql:8.4' } };
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.2.0' })])).rejects.toThrow(
+      'b: uses the image mysql:8.4 and needs minAppVersion >= 1.3.0',
+    );
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.3.0' })]),
     ).resolves.toBeUndefined();
   });
 

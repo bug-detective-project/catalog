@@ -108,11 +108,12 @@ A project whose code needs a database declares it in `bugDetective.project.servi
 - `args` (optional) is the list of arguments of the server: a password, a memory limit, a setting.
   The service then runs the image's server program (`postgres`, `mysqld` or `redis-server`, which
   the project does not choose) followed by them, each exactly as written, with no shell in
-  between. Without `args` the image runs as it is. The rules: at most 24 arguments of 1 to 200
+  between. Without `args` the image runs as it is. The rules: at most 24 arguments of up to 200
   characters each, with no line breaks; the first one is an option (it starts with `-`); and none
   sets what the app controls, the port, the data folder, the listening address or the user
   (`reservedOptions` of each image in `src/contract/services.ts`), in any spelling: `--port=7000`,
-  `-c port=5433` and `-P3307` are all refused. For example, the Redis image reads no password
+  `-c port=5433` and `-P3307` are all refused. An empty argument is allowed after the first one
+  (Redis turns its snapshots off with `--save ""`). For example, the Redis image reads no password
   from the environment, so a project gives it as an argument, with a memory limit that keeps a
   full cache from being killed:
 
@@ -141,7 +142,10 @@ privileges and published on `127.0.0.1` only, passes the variables to `npm run q
 containers afterwards, also when the run fails or is interrupted. Containers a crashed run left
 behind are removed by the next one. A service whose arguments its server refuses stops at once,
 and the error carries the end of its log. A catalog project that declares services needs
-`minAppVersion` 1.2.0 or newer, and one that gives a service `args` needs 1.4.0 or newer.
+`minAppVersion` 1.2.0 or newer; one that uses `mysql:8.4` needs 1.3.0 or newer; and one that uses
+`redis:8` or gives a service `args`, even an empty list, needs 1.4.0 or newer. An older app does
+not know the image or the field and refuses the project's manifest, so `bd catalog-check` refuses
+the catalog entry first (`minAppVersion` of each image in `SERVICE_IMAGES`).
 
 ### Project ports
 

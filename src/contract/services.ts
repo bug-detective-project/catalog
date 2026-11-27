@@ -26,6 +26,11 @@ export interface ServiceImage {
   tmpfsPaths: readonly string[];
   /** A command that exits 0 inside the container once the server accepts connections. */
   ready: readonly string[];
+  /**
+   * The first app version whose contract knows this image: an older app refuses the whole manifest
+   * of a project that uses it, so the catalog asks at least this `minAppVersion` of such a project.
+   */
+  minAppVersion: string;
   /** The server program: what runs, followed by the project's `args`, when a service declares any. */
   server: string;
   /**
@@ -45,6 +50,7 @@ export const SERVICE_IMAGES: Readonly<Record<string, ServiceImage>> = {
     dataPaths: ['/var/lib/postgresql/data'],
     tmpfsPaths: ['/var/run/postgresql', '/tmp'],
     ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
+    minAppVersion: '1.2.0',
     server: 'postgres',
     reservedOptions: [
       '-p',
@@ -68,6 +74,7 @@ export const SERVICE_IMAGES: Readonly<Record<string, ServiceImage>> = {
     dataPaths: ['/var/lib/mysql'],
     tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
     ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+    minAppVersion: '1.3.0',
     server: 'mysqld',
     reservedOptions: [
       '-P',
@@ -91,6 +98,7 @@ export const SERVICE_IMAGES: Readonly<Record<string, ServiceImage>> = {
     dataPaths: ['/data'],
     tmpfsPaths: [],
     ready: ['redis-cli', '-h', '127.0.0.1', 'ping'],
+    minAppVersion: '1.4.0',
     server: 'redis-server',
     reservedOptions: ['--port', '--bind', '--dir', '--unixsocket', '--tls-port', '--daemonize'],
   },
@@ -228,13 +236,12 @@ const projectServiceSchema = z
     if (args.length > SERVICE_ARGS_MAX) {
       argIssue(`at most ${SERVICE_ARGS_MAX} arguments`);
     }
-    if (args[0] !== undefined && args[0] !== '' && !args[0].startsWith('-')) {
+    if (args[0] !== undefined && !args[0].startsWith('-')) {
       argIssue('the first argument must be an option (start with -)', 0);
     }
     args.forEach((arg, index) => {
-      if (arg === '') {
-        argIssue('an argument may not be empty', index);
-      } else if (arg.length > SERVICE_ARG_LENGTH_MAX) {
+      // An empty argument is a value some servers take: Redis turns its snapshots off with --save "".
+      if (arg.length > SERVICE_ARG_LENGTH_MAX) {
         argIssue(`at most ${SERVICE_ARG_LENGTH_MAX} characters`, index);
       } else if (CONTROL_CHARACTER.test(arg)) {
         argIssue('an argument may not have line breaks or other control characters', index);
