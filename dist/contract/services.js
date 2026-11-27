@@ -2,9 +2,9 @@
  * The services of a project: the database, cache or message broker its code needs, declared in
  * package.json `bugDetective.project.services` on the qa branch and copied by bd into the manifest.
  *
- * The catalog knows each allowed image (its pinned reference, port, user, data paths and readiness
- * command); a project only picks an image, a memory limit, the container's environment and the
- * variables its own code reads. Whoever starts a service fills `{{host}}` and `{{port}}` in those
+ * The catalog knows each allowed image (its pinned reference, port, user, data paths, readiness
+ * command and server program); a project only picks an image, a memory limit, the container's
+ * environment, the arguments of the server and the variables its own code reads. Whoever starts a service fills `{{host}}` and `{{port}}` in those
  * variables: the desktop with the service name on the project's internal network, bd verify with
  * 127.0.0.1 and the published port.
  *
@@ -20,6 +20,19 @@ export const SERVICE_IMAGES = {
         dataPaths: ['/var/lib/postgresql/data'],
         tmpfsPaths: ['/var/run/postgresql', '/tmp'],
         ready: ['pg_isready', '-q', '-h', '127.0.0.1'],
+        server: 'postgres',
+        reservedOptions: [
+            '-p',
+            '--port',
+            '-D',
+            '--data-directory',
+            '-h',
+            '--listen-addresses',
+            '-k',
+            '--unix-socket-directories',
+            '--config-file',
+            '--hba-file',
+        ],
     },
     // MySQL 8.4 LTS. Its default server needs 512m: at 256m it is killed while it creates its data.
     // Ready asks over TCP, because while it creates the data the image runs a server without a network.
@@ -30,6 +43,31 @@ export const SERVICE_IMAGES = {
         dataPaths: ['/var/lib/mysql'],
         tmpfsPaths: ['/var/run/mysqld', '/var/lib/mysql-files', '/tmp'],
         ready: ['mysqladmin', 'ping', '--silent', '-h', '127.0.0.1'],
+        server: 'mysqld',
+        reservedOptions: [
+            '-P',
+            '--port',
+            '-h',
+            '--datadir',
+            '--bind-address',
+            '-u',
+            '--user',
+            '-S',
+            '--socket',
+            '--skip-networking',
+        ],
+    },
+    // Redis 8 (8.10.3). The image reads no password from the environment: a project gives it, and a
+    // memory limit, as `args`. Ready needs no password: an answer of NOAUTH still exits 0.
+    'redis:8': {
+        reference: 'redis@sha256:91cc9227bca4d2f717b1ad33d2ebba8127c16b0c2ca731dd9e6010d7629227a5',
+        port: 6379,
+        user: '999:999',
+        dataPaths: ['/data'],
+        tmpfsPaths: [],
+        ready: ['redis-cli', '-h', '127.0.0.1', 'ping'],
+        server: 'redis-server',
+        reservedOptions: ['--port', '--bind', '--dir', '--unixsocket', '--tls-port', '--daemonize'],
     },
 };
 export const SERVICE_MEMORY_DEFAULT = '256m';
@@ -43,6 +81,9 @@ export const QA_MEMORY = '2g';
 /** The most a project may need at once: workspace, services, QA and the services of QA. */
 export const PEAK_MEMORY_MAX = '8g';
 export const SERVICES_MAX = 4;
+/** The most arguments a service may declare, and the longest one. */
+export const SERVICE_ARGS_MAX = 24;
+export const SERVICE_ARG_LENGTH_MAX = 200;
 /** How long a service may take to accept connections. */
 export const SERVICE_READY_TIMEOUT_MS = 60_000;
 /** The process limit of a service container. */
@@ -56,6 +97,41 @@ const MARKERS = ['host', 'port'];
 const APP_PREFIX = 'BUGDETECTIVE_';
 const RESERVED_VARIABLES = ['PATH', 'HOME', 'NODE_OPTIONS', 'NODE_PATH', 'SHELL', 'USER', 'PWD'];
 const UNITS = { k: 1024, m: 1024 ** 2, g: 1024 ** 3 };
+/** A line break or another control character: nothing a server option needs. */
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+/**
+ * The reserved option each argument sets, by position: an option of the image's `reservedOptions`
+ * in any of its spellings. A long option is compared up to its `=`, with `_` read as `-`
+ * (`--data_directory=/x`); a short one also with its value attached (`-P3307`), in its own case;
+ * and PostgreSQL's `-c name=value` (or `-cname=value`) counts as the long option `--name`.
+ */
+function reservedOptionsIn(image, args) {
+    const found = new Map();
+    const long = (text) => {
+        const option = text.split('=')[0].replaceAll('_', '-');
+        return image.reservedOptions.includes(option) ? option : undefined;
+    };
+    args.forEach((arg, index) => {
+        let option;
+        if (image.server === 'postgres' && arg.startsWith('-c') && !arg.startsWith('--')) {
+            // The setting follows -c, attached or as the next argument, which is reported in its own turn.
+            option = arg.length > 2 ? long(`--${arg.slice(2)}`) : undefined;
+        }
+        else if (image.server === 'postgres' && args[index - 1] === '-c') {
+            option = long(`--${arg}`);
+        }
+        else if (arg.startsWith('--')) {
+            option = long(arg);
+        }
+        else if (arg.startsWith('-')) {
+            option = image.reservedOptions.find((reserved) => !reserved.startsWith('--') && arg.startsWith(reserved));
+        }
+        if (option !== undefined) {
+            found.set(index, option);
+        }
+    });
+    return found;
+}
 /**
  * What is wrong with the name of a variable a project declares for its code (a service's or a
  * port's); undefined when it is fine.
@@ -108,9 +184,37 @@ const projectServiceSchema = z
      * on a free port, for the player's own database tools. The code never uses it.
      */
     publish: z.boolean().optional(),
+    /**
+     * The arguments of the server (a password, a memory limit, a setting): they follow the image's
+     * server program, which the project does not choose. Without them the image runs as it is.
+     */
+    args: z.array(z.string()).optional(),
 })
     .strict()
     .superRefine((service, ctx) => {
+    const args = service.args ?? [];
+    const argIssue = (message, index) => ctx.addIssue({ code: 'custom', message, path: index === undefined ? ['args'] : ['args', index] });
+    if (args.length > SERVICE_ARGS_MAX) {
+        argIssue(`at most ${SERVICE_ARGS_MAX} arguments`);
+    }
+    if (args[0] !== undefined && args[0] !== '' && !args[0].startsWith('-')) {
+        argIssue('the first argument must be an option (start with -)', 0);
+    }
+    args.forEach((arg, index) => {
+        if (arg === '') {
+            argIssue('an argument may not be empty', index);
+        }
+        else if (arg.length > SERVICE_ARG_LENGTH_MAX) {
+            argIssue(`at most ${SERVICE_ARG_LENGTH_MAX} characters`, index);
+        }
+        else if (CONTROL_CHARACTER.test(arg)) {
+            argIssue('an argument may not have line breaks or other control characters', index);
+        }
+    });
+    const image = SERVICE_IMAGES[service.image];
+    for (const [index, option] of image ? reservedOptionsIn(image, args) : []) {
+        argIssue(`${option} is set by the app`, index);
+    }
     for (const [name, value] of Object.entries(service.variables ?? {})) {
         const issue = (message) => ctx.addIssue({ code: 'custom', message, path: ['variables', name] });
         const nameProblem = variableNameProblem(name);
@@ -225,6 +329,15 @@ export function serviceImageOf(service) {
         throw new Error(`${service.image} is not an allowed image`);
     }
     return image;
+}
+/**
+ * What follows the image in the `docker run` of a service: nothing when it declares no arguments
+ * (the image runs its own command, as always), otherwise the image's server program and the
+ * arguments, each as it was declared. Nothing here goes through a shell.
+ */
+export function serviceCommand(service) {
+    const args = service.args ?? [];
+    return args.length === 0 ? [] : [serviceImageOf(service).server, ...args];
 }
 /**
  * The `docker run` arguments of a service before the image: name, labels, limits, hardening and

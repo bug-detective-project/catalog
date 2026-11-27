@@ -72,6 +72,7 @@ export declare const manifestSchema: z.ZodObject<{
             env: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
             variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
             publish: z.ZodOptional<z.ZodBoolean>;
+            args: z.ZodOptional<z.ZodArray<z.ZodString>>;
         }, z.core.$strict>>>;
         memory: z.ZodOptional<z.ZodObject<{
             workspace: z.ZodOptional<z.ZodString>;

@@ -175,6 +175,20 @@ describe('buildManifest', () => {
       expect(project.memory).toEqual({ workspace: '4g' });
     });
 
+    it("copies a service's args into the manifest", async () => {
+      const cache = { image: 'redis:8', args: ['--requirepass', 'cartworks', '--maxmemory', '96mb'] };
+      await declare({ services: { cache } });
+      const { project } = await build();
+      expect(project.services).toEqual({ cache });
+    });
+
+    it("refuses a reserved option in a service's args, naming the file and the argument", async () => {
+      await declare({ services: { cache: { image: 'redis:8', args: ['--port', '7000'] } } });
+      await expect(build()).rejects.toThrow(
+        /package\.json: bugDetective\.project\.services\.cache\.args\.0: --port is set by the app/,
+      );
+    });
+
     it('has neither when package.json gives none', async () => {
       const { project } = await build();
       expect(project).not.toHaveProperty('services');

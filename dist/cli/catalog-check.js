@@ -1,6 +1,6 @@
 /** bd catalog-check: the catalog's own check, on every pull request and every day. */
 import { readFile } from 'node:fs/promises';
-import { SERVICES_MIN_APP_VERSION, TICKET_TYPES_MIN_APP_VERSION, parseCatalog } from '../contract/catalog.js';
+import { SERVICE_ARGS_MIN_APP_VERSION, SERVICES_MIN_APP_VERSION, TICKET_TYPES_MIN_APP_VERSION, parseCatalog, } from '../contract/catalog.js';
 import { compareVersions } from '../contract/manifest.js';
 import { validateRemote } from './remote.js';
 const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -36,6 +36,12 @@ export async function checkCatalog({ file, validate = validateRemote, log = () =
             const runsServices = project.minAppVersion !== undefined && compareVersions(project.minAppVersion, SERVICES_MIN_APP_VERSION) >= 0;
             if (declaresServices && !runsServices) {
                 problems.push(`${project.id}: declares services and needs minAppVersion >= ${SERVICES_MIN_APP_VERSION}`);
+            }
+            const declaresArgs = Object.values(manifest.project.services ?? {}).some((service) => (service.args ?? []).length > 0);
+            const runsArgs = project.minAppVersion !== undefined &&
+                compareVersions(project.minAppVersion, SERVICE_ARGS_MIN_APP_VERSION) >= 0;
+            if (declaresArgs && !runsArgs) {
+                problems.push(`${project.id}: declares service arguments and needs minAppVersion >= ${SERVICE_ARGS_MIN_APP_VERSION}`);
             }
             const level = manifest.project.difficulty;
             if (project.starter || level === undefined) {

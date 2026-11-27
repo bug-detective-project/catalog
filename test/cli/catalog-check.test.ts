@@ -130,6 +130,26 @@ describe('bd catalog-check, the order and the app version', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('requires minAppVersion 1.4.0 of a project with service arguments', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    manifests.b.services = { cache: { image: 'redis:8', args: ['--requirepass', 'cartworks'] } };
+    const message = 'b: declares service arguments and needs minAppVersion >= 1.4.0';
+    await expect(check([project('a', { starter: true }), project('b', { minAppVersion: '1.3.0' })])).rejects.toThrow(
+      message,
+    );
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.4.0' })]),
+    ).resolves.toBeUndefined();
+  });
+
+  it('asks no newer app version of a service with an empty list of arguments', async () => {
+    levels({ a: 'beginner', b: 'beginner' });
+    manifests.b.services = { db: { image: 'postgres:17', args: [] } };
+    await expect(
+      check([project('a', { starter: true }), project('b', { minAppVersion: '1.2.0' })]),
+    ).resolves.toBeUndefined();
+  });
+
   it('asks no app version of a project with an empty services declaration', async () => {
     levels({ a: 'beginner' });
     manifests.a.services = {};

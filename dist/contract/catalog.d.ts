@@ -9,6 +9,8 @@ export declare const PROJECT_OWNER = "bug-detective-project";
 export declare const TICKET_TYPES_MIN_APP_VERSION = "1.1.0";
 /** The first app version that runs the services of a project: a project that declares any needs at least it. */
 export declare const SERVICES_MIN_APP_VERSION = "1.2.0";
+/** The first app version that runs a service with arguments: a project that declares any for a service needs at least it. */
+export declare const SERVICE_ARGS_MIN_APP_VERSION = "1.4.0";
 export declare const catalogProjectSchema: z.ZodObject<{
     id: z.ZodString;
     repository: z.ZodString;
