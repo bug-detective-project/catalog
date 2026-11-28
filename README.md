@@ -122,9 +122,12 @@ A project whose code needs a database declares it in `bugDetective.project.servi
     "image": "redis:8",
     "memory": "128m",
     "args": ["--requirepass", "shop", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru"],
-    "variables": { "REDIS_URL": "redis://:shop@{{host}}:{{port}}" }
+    "variables": { "REDIS_URL": "redis://default:shop@{{host}}:{{port}}" }
   }
   ```
+
+  The address names the user, `default`: the `redis-cli` of the app's workspace (7.0) sends an
+  empty user name for `redis://:shop@…` and the server refuses it, while other clients accept both.
 
 - `publish: true` (optional) asks the app to also publish the service's port on the player's
   computer, on `127.0.0.1` only and on a free port, for the player's own database tools. The
