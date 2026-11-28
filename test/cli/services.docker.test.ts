@@ -33,6 +33,17 @@ const mysql: ProjectServices = {
 };
 const MYSQL_REFERENCE = SERVICE_IMAGES['mysql:8.4']!.reference;
 
+/** The cache of CartWorks: a password and a memory limit, both given as arguments of the server. */
+const redis: ProjectServices = {
+  cache: {
+    image: 'redis:8',
+    memory: '128m',
+    args: ['--requirepass', 'cartworks', '--maxmemory', '96mb', '--maxmemory-policy', 'allkeys-lru'],
+    variables: { REDIS_URL: 'redis://:cartworks@{{host}}:{{port}}' },
+  },
+};
+const REDIS_REFERENCE = SERVICE_IMAGES['redis:8']!.reference;
+
 const docker = (...args: string[]): string => execFileSync('docker', args, { encoding: 'utf8' }).trim();
 /** The verify containers of this test process, running or not. */
 const mine = (): string[] =>
@@ -59,11 +70,34 @@ const opens = (host: string, port: number): Promise<boolean> =>
     socket.once('error', () => resolve(false));
   });
 
+/** Sends each line to a Redis over one connection and gives the server's answer to each. */
+const redisSays = (host: string, port: number, lines: string[]): Promise<string[]> =>
+  new Promise((resolve, reject) => {
+    const socket = connect({ host, port });
+    const answers: string[] = [];
+    const next = () => {
+      const line = lines[answers.length];
+      if (line === undefined) {
+        socket.destroy();
+        resolve(answers);
+      } else {
+        socket.write(`${line}\r\n`);
+      }
+    };
+    socket.setTimeout(10_000, () => socket.destroy(new Error('the Redis did not answer')));
+    socket.once('connect', next);
+    socket.on('data', (data) => {
+      answers.push(data.toString());
+      next();
+    });
+    socket.once('error', reject);
+  });
+
 describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real Docker', () => {
   const had = new Map<string, boolean>();
 
   beforeAll(() => {
-    for (const reference of [REFERENCE, MYSQL_REFERENCE]) {
+    for (const reference of [REFERENCE, MYSQL_REFERENCE, REDIS_REFERENCE]) {
       had.set(reference, docker('images', '--quiet', reference) !== '');
     }
   });
@@ -120,6 +154,42 @@ describe.skipIf(process.env.BD_DOCKER_TESTS !== '1')('project services on a real
     }
     expect(mine()).toEqual([]);
   }, 300_000);
+
+  it('starts a Redis with the password and the memory limit its args give', async () => {
+    const running = await startServices(redis, { project: 'docker-test' });
+    try {
+      const url = new URL(running.env.REDIS_URL!);
+      expect(url.password).toBe('cartworks');
+      const [refused, accepted, limit] = await redisSays(url.hostname, Number(url.port), [
+        'PING',
+        'AUTH cartworks',
+        'CONFIG GET maxmemory',
+      ]);
+      // Ready although the readiness command knows no password: an answer of NOAUTH is an answer.
+      expect(refused).toMatch(/^-NOAUTH/);
+      expect(accepted).toBe('+OK\r\n');
+      expect(limit).toContain(String(96 * 1024 * 1024));
+
+      const [name] = mine();
+      expect(docker('inspect', '--format', '{{json .Config.Cmd}}', name!)).toBe(
+        JSON.stringify(['redis-server', ...redis.cache!.args!]),
+      );
+      expect(docker('inspect', '--format', '{{.Config.User}} {{.HostConfig.ReadonlyRootfs}}', name!)).toBe(
+        '999:999 true',
+      );
+    } finally {
+      await running.stop();
+    }
+    expect(mine()).toEqual([]);
+  }, 180_000);
+
+  it('fails at once with the log of a service whose argument the server refuses, and leaves nothing', async () => {
+    const mistyped: ProjectServices = { cache: { image: 'redis:8', args: ['--maxmemoryy', '96mb'] } };
+    const started = Date.now();
+    await expect(startServices(mistyped, { project: 'docker-test' })).rejects.toThrow(/maxmemoryy/);
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(mine()).toEqual([]);
+  }, 60_000);
 
   it('fails with the container log when the service cannot start, and leaves nothing', async () => {
     const broken: ProjectServices = { db: { image: 'postgres:17' } };

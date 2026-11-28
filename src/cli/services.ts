@@ -6,7 +6,13 @@
  * 127.0.0.1 only, on a free port. Removal never depends on this process's memory surviving: a
  * later run sweeps the containers whose owner is gone.
  */
-import { SERVICE_READY_TIMEOUT_MS, serviceImageOf, serviceRunArgs, serviceVariables } from '../contract/services.ts';
+import {
+  SERVICE_READY_TIMEOUT_MS,
+  serviceCommand,
+  serviceImageOf,
+  serviceRunArgs,
+  serviceVariables,
+} from '../contract/services.ts';
 import type { ProjectServices } from '../contract/services.ts';
 import { run } from './process.ts';
 
@@ -107,6 +113,7 @@ export async function startServices(
         '--publish',
         `127.0.0.1::${image.port}`,
         image.reference,
+        ...serviceCommand(declared),
       ]);
       if (started.code !== 0) {
         throw new Error(`${label} could not be started: ${lastLine(started.stderr) || `exit ${started.code}`}`);

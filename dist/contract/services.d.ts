@@ -2,9 +2,9 @@
  * The services of a project: the database, cache or message broker its code needs, declared in
  * package.json `bugDetective.project.services` on the qa branch and copied by bd into the manifest.
  *
- * The catalog knows each allowed image (its pinned reference, port, user, data paths and readiness
- * command); a project only picks an image, a memory limit, the container's environment and the
- * variables its own code reads. Whoever starts a service fills `{{host}}` and `{{port}}` in those
+ * The catalog knows each allowed image (its pinned reference, port, user, data paths, readiness
+ * command and server program); a project only picks an image, a memory limit, the container's
+ * environment, the arguments of the server and the variables its own code reads. Whoever starts a service fills `{{host}}` and `{{port}}` in those
  * variables: the desktop with the service name on the project's internal network, bd verify with
  * 127.0.0.1 and the published port.
  *
@@ -25,6 +25,19 @@ export interface ServiceImage {
     tmpfsPaths: readonly string[];
     /** A command that exits 0 inside the container once the server accepts connections. */
     ready: readonly string[];
+    /**
+     * The first app version whose contract knows this image: an older app refuses the whole manifest
+     * of a project that uses it, so the catalog asks at least this `minAppVersion` of such a project.
+     */
+    minAppVersion: string;
+    /** The server program: what runs, followed by the project's `args`, when a service declares any. */
+    server: string;
+    /**
+     * The options the app sets itself (port, data folder, listening address, user). A project that
+     * passes one is told so when it is validated, instead of getting a service that never is ready.
+     * This is for a clear message, not a security boundary: that is the container's hardening.
+     */
+    reservedOptions: readonly string[];
 }
 /** The allowed images. A new one enters by pull request, when a project that needs it is designed. */
 export declare const SERVICE_IMAGES: Readonly<Record<string, ServiceImage>>;
@@ -39,6 +52,9 @@ export declare const QA_MEMORY = "2g";
 /** The most a project may need at once: workspace, services, QA and the services of QA. */
 export declare const PEAK_MEMORY_MAX = "8g";
 export declare const SERVICES_MAX = 4;
+/** The most arguments a service may declare, and the longest one. */
+export declare const SERVICE_ARGS_MAX = 24;
+export declare const SERVICE_ARG_LENGTH_MAX = 200;
 /** How long a service may take to accept connections. */
 export declare const SERVICE_READY_TIMEOUT_MS = 60000;
 /** The process limit of a service container. */
@@ -56,6 +72,7 @@ declare const projectServiceSchema: z.ZodObject<{
     env: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     publish: z.ZodOptional<z.ZodBoolean>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>;
 export type ProjectService = z.infer<typeof projectServiceSchema>;
 export type ProjectServices = Record<string, ProjectService>;
@@ -65,6 +82,7 @@ export declare const projectServicesSchema: z.ZodRecord<z.ZodString, z.ZodObject
     env: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     variables: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
     publish: z.ZodOptional<z.ZodBoolean>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>>;
 /** A project may ask for a larger workspace (package.json `bugDetective.project.memory`). */
 export declare const projectMemorySchema: z.ZodObject<{
@@ -98,6 +116,12 @@ export declare function serviceVariables(services: ProjectServices, address: (na
 }): Record<string, string>;
 /** The image entry of a service; the schema guarantees it exists for a parsed declaration. */
 export declare function serviceImageOf(service: ProjectService): ServiceImage;
+/**
+ * What follows the image in the `docker run` of a service: nothing when it declares no arguments
+ * (the image runs its own command, as always), otherwise the image's server program and the
+ * arguments, each as it was declared. Nothing here goes through a shell.
+ */
+export declare function serviceCommand(service: ProjectService): string[];
 /**
  * The `docker run` arguments of a service before the image: name, labels, limits, hardening and
  * data. No network and no ports: the caller adds its own. With `data: 'tmpfs'` the data lives in

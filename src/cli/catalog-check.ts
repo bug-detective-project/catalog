@@ -1,7 +1,13 @@
 /** bd catalog-check: the catalog's own check, on every pull request and every day. */
 import { readFile } from 'node:fs/promises';
-import { SERVICES_MIN_APP_VERSION, TICKET_TYPES_MIN_APP_VERSION, parseCatalog } from '../contract/catalog.ts';
+import {
+  SERVICE_ARGS_MIN_APP_VERSION,
+  SERVICES_MIN_APP_VERSION,
+  TICKET_TYPES_MIN_APP_VERSION,
+  parseCatalog,
+} from '../contract/catalog.ts';
 import { compareVersions } from '../contract/manifest.ts';
+import { SERVICE_IMAGES } from '../contract/services.ts';
 import type { ProjectManifest } from '../contract/manifest.ts';
 import { validateRemote } from './remote.ts';
 import type { ValidateRemoteOptions } from './remote.ts';
@@ -55,6 +61,23 @@ export async function checkCatalog({
         project.minAppVersion !== undefined && compareVersions(project.minAppVersion, SERVICES_MIN_APP_VERSION) >= 0;
       if (declaresServices && !runsServices) {
         problems.push(`${project.id}: declares services and needs minAppVersion >= ${SERVICES_MIN_APP_VERSION}`);
+      }
+      // An older app refuses the field itself, empty list included.
+      const declaresArgs = Object.values(manifest.project.services ?? {}).some((service) => service.args !== undefined);
+      const runsArgs =
+        project.minAppVersion !== undefined &&
+        compareVersions(project.minAppVersion, SERVICE_ARGS_MIN_APP_VERSION) >= 0;
+      if (declaresArgs && !runsArgs) {
+        problems.push(
+          `${project.id}: declares service arguments and needs minAppVersion >= ${SERVICE_ARGS_MIN_APP_VERSION}`,
+        );
+      }
+      // Each image entered the contract in some app version: an older app refuses the manifest.
+      for (const service of runsServices ? Object.values(manifest.project.services ?? {}) : []) {
+        const needed = SERVICE_IMAGES[service.image]?.minAppVersion;
+        if (needed !== undefined && compareVersions(project.minAppVersion!, needed) < 0) {
+          problems.push(`${project.id}: uses the image ${service.image} and needs minAppVersion >= ${needed}`);
+        }
       }
       const level = manifest.project.difficulty;
       if (project.starter || level === undefined) {

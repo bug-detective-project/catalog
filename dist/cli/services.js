@@ -6,7 +6,7 @@
  * 127.0.0.1 only, on a free port. Removal never depends on this process's memory surviving: a
  * later run sweeps the containers whose owner is gone.
  */
-import { SERVICE_READY_TIMEOUT_MS, serviceImageOf, serviceRunArgs, serviceVariables } from '../contract/services.js';
+import { SERVICE_READY_TIMEOUT_MS, serviceCommand, serviceImageOf, serviceRunArgs, serviceVariables, } from '../contract/services.js';
 import { run } from './process.js';
 export const dockerCli = async (args) => {
     const result = await run('docker', args);
@@ -76,6 +76,7 @@ export async function startServices(services, options) {
                 '--publish',
                 `127.0.0.1::${image.port}`,
                 image.reference,
+                ...serviceCommand(declared),
             ]);
             if (started.code !== 0) {
                 throw new Error(`${label} could not be started: ${lastLine(started.stderr) || `exit ${started.code}`}`);

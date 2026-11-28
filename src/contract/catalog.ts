@@ -16,6 +16,9 @@ export const TICKET_TYPES_MIN_APP_VERSION = '1.1.0';
 /** The first app version that runs the services of a project: a project that declares any needs at least it. */
 export const SERVICES_MIN_APP_VERSION = '1.2.0';
 
+/** The first app version that runs a service with arguments: a project that declares any for a service needs at least it. */
+export const SERVICE_ARGS_MIN_APP_VERSION = '1.4.0';
+
 export const catalogProjectSchema = z.object({
   /** Must match project.id in the manifest of the project's qa branch. */
   id: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/, 'ids are lowercase, like supportdesk'),

@@ -92,9 +92,10 @@ A project whose code needs a database declares it in `bugDetective.project.servi
 ```
 
 - `image` is a name from the list of allowed images (`SERVICE_IMAGES` in `src/contract/services.ts`),
-  today `postgres:17` and `mysql:8.4` (whose default server needs `512m`). The list pins each image by digest and knows its port, its unprivileged
-  user, its data paths and the command that tells when it is ready. A new image enters by pull
-  request to this repository.
+  today `postgres:17`, `mysql:8.4` (whose default server needs `512m`) and `redis:8` (which runs
+  in `128m`). The list pins each image by digest and knows its port, its unprivileged user, its
+  data paths, the command that tells when it is ready and its server program. A new image enters
+  by pull request to this repository.
 - `memory` is the container's limit, from `64m` to `1g` (default `256m`), written as a whole number
   followed by `k`, `m` or `g`.
 - `env` is the environment of the service's own container.
@@ -104,6 +105,27 @@ A project whose code needs a database declares it in `bugDetective.project.servi
   never a fixed address. A name is upper-case, may not start with `BUGDETECTIVE_` and may not be
   `PATH`, `HOME`, `NODE_OPTIONS`, `NODE_PATH`, `SHELL`, `USER` or `PWD`; two services may not define
   the same one.
+- `args` (optional) is the list of arguments of the server: a password, a memory limit, a setting.
+  The service then runs the image's server program (`postgres`, `mysqld` or `redis-server`, which
+  the project does not choose) followed by them, each exactly as written, with no shell in
+  between. Without `args` the image runs as it is. The rules: at most 24 arguments of up to 200
+  characters each, with no line breaks; the first one is an option (it starts with `-`); and none
+  sets what the app controls, the port, the data folder, the listening address or the user
+  (`reservedOptions` of each image in `src/contract/services.ts`), in any spelling: `--port=7000`,
+  `-c port=5433` and `-P3307` are all refused. An empty argument is allowed after the first one
+  (Redis turns its snapshots off with `--save ""`). For example, the Redis image reads no password
+  from the environment, so a project gives it as an argument, with a memory limit that keeps a
+  full cache from being killed:
+
+  ```json
+  "cache": {
+    "image": "redis:8",
+    "memory": "128m",
+    "args": ["--requirepass", "shop", "--maxmemory", "96mb", "--maxmemory-policy", "allkeys-lru"],
+    "variables": { "REDIS_URL": "redis://:shop@{{host}}:{{port}}" }
+  }
+  ```
+
 - `publish: true` (optional) asks the app to also publish the service's port on the player's
   computer, on `127.0.0.1` only and on a free port, for the player's own database tools. The
   project's code never uses that port.
@@ -118,8 +140,12 @@ A project whose code needs a database declares it in `bugDetective.project.servi
 for such a project: before every QA run it starts each service with its data in memory, without
 privileges and published on `127.0.0.1` only, passes the variables to `npm run qa`, and removes the
 containers afterwards, also when the run fails or is interrupted. Containers a crashed run left
-behind are removed by the next one. A catalog project that declares services needs `minAppVersion`
-1.2.0 or newer.
+behind are removed by the next one. A service whose arguments its server refuses stops at once,
+and the error carries the end of its log. A catalog project that declares services needs
+`minAppVersion` 1.2.0 or newer; one that uses `mysql:8.4` needs 1.3.0 or newer; and one that uses
+`redis:8` or gives a service `args`, even an empty list, needs 1.4.0 or newer. An older app does
+not know the image or the field and refuses the project's manifest, so `bd catalog-check` refuses
+the catalog entry first (`minAppVersion` of each image in `SERVICE_IMAGES`).
 
 ### Project ports
 

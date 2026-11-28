@@ -60,6 +60,38 @@ describe('startServices', () => {
     expect(running.env).toEqual({ DATABASE_URL: 'postgres://postgres:shop@127.0.0.1:49153/postgres' });
   });
 
+  it('runs the server program and the args after the image', async () => {
+    const cache: ProjectServices = {
+      cache: {
+        image: 'redis:8',
+        args: ['--requirepass', 'cartworks', '--maxmemory', '96mb'],
+        variables: { REDIS_URL: 'redis://:cartworks@{{host}}:{{port}}' },
+      },
+    };
+    const { docker, of } = fakeDocker();
+    const running = await startServices(cache, { project: 'shop', docker, pollMs: 1 });
+
+    const [run] = of('run');
+    expect(run!.slice(-8)).toEqual([
+      '--publish',
+      '127.0.0.1::6379',
+      'redis@sha256:91cc9227bca4d2f717b1ad33d2ebba8127c16b0c2ca731dd9e6010d7629227a5',
+      'redis-server',
+      '--requirepass',
+      'cartworks',
+      '--maxmemory',
+      '96mb',
+    ]);
+    expect(of('exec')[0]!.slice(2)).toEqual(['redis-cli', '-h', '127.0.0.1', 'ping']);
+    expect(running.env).toEqual({ REDIS_URL: 'redis://:cartworks@127.0.0.1:49153' });
+  });
+
+  it('runs nothing after the image without args', async () => {
+    const { docker, of } = fakeDocker();
+    await start(docker);
+    expect(of('run')[0]!.at(-1)).toBe(REFERENCE);
+  });
+
   it('gives every run its own container names', async () => {
     const { docker, of } = fakeDocker();
     await start(docker);
